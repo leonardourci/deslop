@@ -25,7 +25,7 @@ verify run
 verify status
 ```
 
-`init --repo` writes `verify.config.json` and `.github/workflows/verify.yml` together. The workflow checks the marker; it never checks out or executes pull request code. `init --machine` keeps only the config on your machine, shared across copies of the same remote repository. A repo config wins over a machine config. Existing files are never overwritten. Use `--config <file>` to initialize from a prepared config.
+`init --repo` writes `verify.config.json` and `.github/workflows/verify.yml` together. The workflow checks the marker; it never checks out or executes pull request code. `init --machine` keeps only the config on your machine, shared across copies of the same remote repository. A repo config wins over a machine config. Existing files are never overwritten. Use `--config <file>` to initialize from a prepared config. To enforce the marker, require the `verify` status check in branch protection. Replace legacy gate names and remove global CI requirements if per-kind selection and accepted local fallback should decide what counts.
 
 Repositories with existing GitHub workflows default to CI mode. Others default to local mode. `init --mode local` or `--mode ci` chooses explicitly. Fill in local step commands before running. The tool creates no workflow to run those steps.
 
