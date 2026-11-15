@@ -85,7 +85,10 @@ export async function review({ cwd, common, choices, config, settings, prompt, s
       let value;
       try { value = JSON.parse(raw); } catch { throw new DeslopError('REVIEW_OUTPUT', 'Agent returned invalid JSON'); }
       const items = parseReview({ value });
-      sessionId ||= value.sessionId;
+      if (value.sessionId !== undefined) {
+        if (typeof value.sessionId !== 'string' || !value.sessionId.trim()) throw new DeslopError('REVIEW_OUTPUT', 'Invalid session id');
+        if (provider !== 'codex' && provider !== 'claude') sessionId = value.sessionId;
+      }
       return { items, session: { provider, id: sessionId, choice } };
     } catch (error) {
       // A provider that started may have edited files before failing.

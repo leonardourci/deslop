@@ -8,6 +8,18 @@ function passed(result) { assert.equal(result.status, 0, result.stdout + result.
 function failed(result, code) { assert.notEqual(result.status, 0, result.stdout); assert.match(result.stderr, new RegExp(`code: ${code}`)); }
 const finding = { id: 'R1', where: 'work.txt:1', problem: 'bad content', fixed: true };
 
+test('checks cannot switch to the default branch at the same commit', t => {
+  const f = fixture(t);
+  f.config.commands.tests = 'git branch -f main HEAD && git switch main';
+  f.configure(); f.commit();
+  const result = f.call('run', '--reviewer', 'fixture');
+  failed(result, 'CHECK_GIT');
+  assert.equal(f.runs()[0].verdict, 'failed');
+  assert.deepEqual(f.runs()[0].commits, []);
+  assert.equal(f.call('status').status, 1);
+  assert.equal(f.load().github.some(args => args.includes('--method')), false);
+});
+
 test('removing a file introduced by an earlier fix retains its required checks', t => {
   const f = fixture(t);
   f.config.commands.extra = 'node -e "process.exit(1)"';

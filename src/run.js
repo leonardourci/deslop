@@ -89,9 +89,11 @@ async function performRun({ places, options }) {
       const currentSelection = select({ config, paths: [...requiredPaths] });
       const ci = originallyPushed && !options.local && currentSelection.checks.length > 0;
       if (ci && head !== pushedHead) { await pushFixes({ cwd, ...info, expected: pushedHead }); pushedHead = head; }
+      const beforeChecks = await gitState({ cwd });
       const checks = await runChecks({ cwd, dir, config, selection: currentSelection, ci, head, attempt: data.checks.length });
       data.checks.push(...checks); save();
       if (await git({ cwd, args: ['rev-parse', 'HEAD'] }) !== head) throw new DeslopError('HEAD_CHANGED', 'HEAD moved during checks');
+      if (await gitState({ cwd }) !== beforeChecks) throw new DeslopError('CHECK_GIT', 'Checks changed git state; deslop refuses to commit, push or mark this run');
       if (await git({ cwd, args: ['status', '--porcelain', '--untracked-files=all'] })) {
         if (formatCommits++ > 0) throw new DeslopError('DIRTY_CHECKS', 'Checks repeatedly edit files; make the commands stable and rerun');
         await commitEdits({ cwd, message: 'deslop: fix failing checks', data });

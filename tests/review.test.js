@@ -5,6 +5,22 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { review } from '../src/review.js';
 
+test('custom resumes retain the latest returned session id', async t => {
+  const cwd = mkdtempSync(join(tmpdir(), 'deslop-provider-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const script = "console.log(JSON.stringify({items:[],sessionId:process.argv[1]+'-next'}))";
+  const config = { reviewers: { custom: {
+    command: [process.execPath, '-e', script, 'initial'],
+    resume: [process.execPath, '-e', script, '{sessionId}'],
+  } } };
+  const args = { cwd, common: cwd, choices: ['custom'], config, settings: {}, prompt: '' };
+  const first = await review(args);
+  const second = await review({ ...args, session: first.session });
+  assert.equal(second.session.id, 'initial-next-next');
+  const third = await review({ ...args, session: second.session });
+  assert.equal(third.session.id, 'initial-next-next-next');
+});
+
 test('a provider failure after editing stops before fallback', async t => {
   const cwd = mkdtempSync(join(tmpdir(), 'deslop-provider-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
