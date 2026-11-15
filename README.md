@@ -54,3 +54,9 @@ Green checks and completed fixes add a git note under `refs/notes/deslop` to the
 There are no modes, review rounds, declines, restart comments, PR-body markers or marker-check workflow. CodeRabbit remains separate and only on request. See [the contract](docs/spec.md).
 
 A GitHub outage does not block local proof. Local runs skip the initial pending-status write. Passed checks keep their git note even if status publication fails; output says the proof is local and the status is not published yet. Retry `deslop status --publish` after a push or when GitHub recovers.
+
+## Editing scope
+
+Tracked instruction prose such as `.agents/`, `.claude/`, `AGENTS.md` and `skills/` can be edited when it is in the reviewed diff. Other instruction files, existing untracked files and ignored paths stay outside the editing scope; git metadata and git commands remain denied. New normal source and test files can be created and are included in deslop's commit and `run.json` under `newFiles`. A dirty checkout is refused before the agent runs.
+
+Codex uses a current CLI with [permission-profile support](https://developers.openai.com/codex/permissions) to grant exact instruction-file exceptions while preserving git protection. Claude uses file-specific Edit rules and non-interactive permissions. Custom commands must honor the supplied file scope and keep git operations disabled.
