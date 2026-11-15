@@ -20,7 +20,7 @@ For a pinned per-repository install, use `npm install --save-dev github:leonardo
 - `deslop status`: read the current commit's git note. `--publish` publishes its GitHub commit status if that final commit is pushed.
 - `deslop shape`: print a small example of the run JSON and identify fields that may be long.
 
-The base is `--base`, the open PR's base, origin's default branch, or local main/master, in that order. Default-branch runs are refused. Local unpushed branches run commands without a PR. If the starting commit is pushed and selected kinds need CI, deslop pushes only its own fixes to the same branch and waits for those exact-head checks. `--local` forces local commands and keeps fixes local. The CI wait has a 60-minute timeout, with a three-minute appearance limit for missing checks and 15-second polling. Missing checks end red after the appearance limit. Skipped, neutral, cancelled, approval-required and stale checks end red without an agent fix call. CI polling retries transient API errors; an unreachable GitHub ends red with a `--local` hint. Deslop never merges or pushes to the default branch.
+The base is `--base`, the open PR's base, origin's default branch, or local main/master, in that order. Default-branch runs are refused. Local unpushed branches run commands without a PR. If the starting commit is pushed and selected kinds need CI, deslop pushes only its own fixes to the same branch and waits for those exact-head checks. `--local` forces local commands and keeps fixes local; kinds marked `ciRequired` still require CI on the final commit. The CI wait has a 60-minute timeout, with a three-minute appearance limit for missing checks and 15-second polling. Missing checks end red after the appearance limit. Skipped, neutral, cancelled, approval-required and stale checks end red without an agent fix call. CI polling retries transient API errors; an unreachable GitHub ends red with a `--local` hint. Deslop never merges or pushes to the default branch.
 
 Only failing, errored or timed-out checks resume the same Codex or Claude session by id, with short failure excerpts. Deslop commits its fixes and reruns checks up to `checkFixAttempts` times (default 1, 0 returns failures immediately). A custom provider without resume support receives a fresh call with a note of earlier changes. Neither AGENTS.md nor CLAUDE.md loads implicitly; set an `instructions` entry to AGENTS.md to use it. Agents can read/edit files, with git tools denied; unexpected git-state changes stop the run. Agent edits use `deslop: fix review findings` or `deslop: fix failing checks`, as the configured user, with no attribution footer. Check commands use their own command-named commits.
 
@@ -45,6 +45,7 @@ Only failing, errored or timed-out checks resume the same Codex or Claude sessio
     }
   ],
   "checkFixAttempts": 1,
+  "publishLocal": false,
   "instructions": { "code": ".agents/skills/review/SKILL.md" },
   "reviewerModels": {
     "codex": { "model": "<gpt-model>", "effort": "high" },
@@ -52,6 +53,8 @@ Only failing, errored or timed-out checks resume the same Codex or Claude sessio
   }
 }
 ```
+
+`publishLocal` defaults to `false`. A kind may set `ciRequired: true` to require all of its named checks in CI, including under `--local` and when local publication is enabled. That kind needs at least one check. Local commands run first; if their final commit is not pushed, deslop ends red with a push-and-rerun hint and posts nothing to GitHub. `--local` never pushes.
 
 Each changed path uses its first matching kind; the run unions commands, checks and instructions. Renames count both paths. Unmatched paths, missing instruction files and unknown commands stop the run. Built-in instructions cover code review, test audit and plain writing; `instructions` replaces named defaults with files, and kinds can choose an instruction list. An omitted list uses all built-in defaults.
 
@@ -63,7 +66,7 @@ Custom providers use `reviewers.<name>.command` as an argv array, receiving the 
 
 A short summary lists the verdict, each check, findings/fixes and commits, with a path to `.deslop/runs/<id>/run.json`. This folder is git-ignored. JSON includes `left` paths after failures, separate `checkFixes` by turn, workflow edits, and checks with `name`, `ok`, `log` and `failures`, review counts/items, and commits. Failure excerpts have at most 20 lines; full output stays in separate logs and can be large. Use `deslop shape` before reading a large run file.
 
-Green checks and completed fixes add a git note under `refs/notes/deslop` to the final exact commit. The GitHub commit status is named `deslop` and is published only once that commit is pushed. A new commit has no proof until it passes its own run. This is an honesty record, not a signature. Failed runs have no new marker.
+Green checks and completed fixes add a git note under `refs/notes/deslop` to the final exact commit. The GitHub commit status is named `deslop` and requires a pushed commit. Local runs keep their proof local by default. `status --publish` checks the selected CI on that exact commit before posting success. Set `publishLocal: true` to allow local checks alone to publish success. A new commit has no proof until it passes its own run. This is an honesty record, not a signature. Failed runs have no new marker.
 
 See [the contract](docs/spec.md).
 
