@@ -160,7 +160,7 @@ test('attempt limits return failures without proof and zero makes no check-fix c
 
 test('dirty work is refused in one line before any agent call and default branches are refused', t => {
   const f = fixture(t); writeFileSync(join(f.root, 'untracked'), 'dirty');
-  const result = f.call('run', '--reviewer', 'fixture'); assert.equal(result.stderr.trim(), 'commit or stash your changes first'); assert.equal(f.load().calls.length, 0);
+  const result = f.call('run', '--reviewer', 'fixture'); assert.equal(result.stderr.trim(), 'commit or stash your changes first'); assert.equal(f.load().calls.length, 0); assert.equal(readFileSync(join(f.root, 'untracked'), 'utf8'), 'dirty');
   rmSync(join(f.root, 'untracked')); f.git('switch', 'main'); failed(f.call('run', '--reviewer', 'fixture'), 'BRANCH');
 });
 
@@ -222,11 +222,11 @@ test('providers deny git tools, retain sessions, detect hosted Codex and apply m
   const s = f.load(); s.actions = [{}, { edit: 'good', items: [finding] }]; f.save(s);
   passed(f.call('run', '--reviewer-model', 'run'));
   const calls = f.load().calls;
-  assert.ok(calls[0].args.includes('features.shell_tool=false')); assert.ok(calls[0].args.includes('sandbox_mode="workspace-write"'));
+  assert.ok(calls[0].args.includes('features.shell_tool=false')); assert.ok(calls[0].args.includes('default_permissions="deslop"')); assert.ok(calls[0].args.some(arg => arg.startsWith('permissions.deslop.filesystem=') && arg.includes('/.git') && arg.includes('="read"')));
   assert.ok(calls[0].args.includes('run')); assert.ok(calls[0].args.includes('model_reasoning_effort="high"'));
   assert.ok(calls[1].args.includes('resume')); assert.ok(calls[1].args.includes('session-fixture')); assert.equal(calls[0].parent, undefined);
   passed(f.call('run', '--reviewer', 'claude'));
-  const claude = f.load().calls.at(-1); assert.ok(claude.args.includes('Read,Glob,Grep,Edit,Write')); assert.match(claude.args[claude.args.indexOf('--settings')+1], /Write\(\*\*\/\.git/); assert.ok(claude.args.includes('--session-id'));
+  const claude = f.load().calls.at(-1); assert.ok(claude.args.includes('Read,Glob,Grep,Edit,Write')); assert.ok(JSON.parse(claude.args[claude.args.indexOf('--settings')+1]).permissions.deny.some(rule => rule.startsWith('Edit(') && rule.includes('/.git'))); assert.ok(claude.args.includes('--session-id'));
 });
 
 test('custom commands without resume get a fresh call explaining earlier commits', t => {
@@ -324,4 +324,14 @@ test('checks changing this checkout index are refused without proof', t => {
   const f = fixture(t); f.config.commands.tests = 'git rm --cached work.txt'; f.configure(); f.commit();
   failed(f.call('run', '--reviewer', 'fixture'), 'CHECK_GIT');
   assert.equal(f.runs()[0].verdict, 'failed'); assert.equal(f.call('status').status, 1);
+});
+
+
+test('new normal test files are created, checked, committed and listed in the run record', t => {
+  const f = fixture(t); f.config.commands.tests = 'node --test new-regression.test.cjs'; f.configure(); f.commit();
+  const s = f.load(); s.actions = [{ newFile: { path: 'new-regression.test.cjs', content: "require('node:test').test('coverage',()=>require('node:assert/strict').equal(2,2));" }, items: [finding] }]; f.save(s);
+  passed(f.call('run', '--reviewer', 'fixture'));
+  assert.deepEqual(f.runs()[0].newFiles, ['new-regression.test.cjs']);
+  assert.equal(f.git('ls-files', '--error-unmatch', 'new-regression.test.cjs'), 'new-regression.test.cjs');
+  assert.equal(f.runs()[0].checks[0].ok, true); passed(f.call('status'));
 });
