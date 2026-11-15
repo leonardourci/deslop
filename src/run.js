@@ -80,7 +80,7 @@ async function performRun({ places, options, env }) {
   } else stepNames = await waitForChecks({ cwd, head, names: selection.checks });
   await cleanHead({ cwd, head });
   const result = await review({ cwd, choices, config, settings,
-    prompt: reviewPrompt({ diff, skills, previous: narrow ? previous.findings : null, fixDiff, declines, binaryFiles }),
+    prompt: reviewPrompt({ diff, skills, previous: narrow ? previous.findings : null, fixDiff, declines: [...(previous?.declines || []), ...declines], binaryFiles }),
     model: options.reviewerModel, effort: options.reviewerEffort, env });
   await cleanHead({ cwd, head });
   if ((await pullRequest({ cwd })).headRefOid !== head) throw new VerifyError('HEAD_CHANGED', 'PR head changed during review');
