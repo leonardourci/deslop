@@ -1,0 +1,32 @@
+{
+  "name": "verify",
+  "version": "0.1.0",
+  "description": "Checks and a fresh agent review for the exact pull request commit",
+  "type": "module",
+  "bin": {
+    "verify": "src/cli.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "test": "node --test",
+    "verify": "node src/cli.js run"
+  },
+  "dependencies": {
+    "picomatch": "4.0.7"
+  },
+  "exports": {
+    "./config": {
+      "types": "./src/config.d.ts",
+      "default": "./src/config.js"
+    }
+  },
+  "files": [
+    "src",
+    "README.md",
+    "docs",
+    "LICENSE"
+  ],
+  "license": "Apache-2.0"
+}
