@@ -17,12 +17,12 @@ export function fixture(t) {
   if (!gitExecutable) throw new Error('Git is required for the test fixtures');
   symlinkSync(gitExecutable, join(bin, gitName));
   symlinkSync(process.execPath, join(bin, process.platform === 'win32' ? 'node.exe' : 'node'));
-  const env = { ...process.env };
-  for (const key of Object.keys(env)) {
-    if (/^(PNYX_|CODEX_|CLAUDE|GH_|GITHUB_|ANTHROPIC_|OPENAI_|AWS_|AZURE_|SSH_|GIT_)/.test(key)) delete env[key];
-  }
-  Object.assign(env, { HOME: home, USERPROFILE: home, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
-    XDG_CONFIG_HOME: join(home, 'config'), PATH: bin, VERIFY_TEST_STATE: join(home, 'github.json') });
+  const env = {
+    HOME: home, USERPROFILE: home, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+    XDG_CONFIG_HOME: join(home, 'config'), XDG_CACHE_HOME: join(home, 'cache'), XDG_DATA_HOME: join(home, 'data'),
+    TMPDIR: home, TMP: home, TEMP: home, LC_ALL: 'C', PATH: bin, VERIFY_TEST_STATE: join(home, 'github.json'),
+  };
+  if (process.env.SystemRoot) env.SystemRoot = process.env.SystemRoot;
   for (const provider of ['codex', 'claude']) writeFileSync(join(bin, provider), '#!/usr/bin/env node\nconsole.error("fixture provider unavailable"); process.exit(78);\n', { mode: 0o755 });
   function git(...args) { return execFileSync('git', args, { cwd: root, env, encoding: 'utf8' }).trim(); }
   git('init', '-b', 'main');

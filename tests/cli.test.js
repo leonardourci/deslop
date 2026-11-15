@@ -139,6 +139,12 @@ test('three unresolved reviews stop and require owner intervention', t => {
   writeFileSync(join(f.root, 'work.txt'), 'attempt three'); f.commit();
   failed(f.call('run', '--reviewer', 'fixture'), 'OWNER_REQUIRED');
   writeFileSync(join(f.root, 'work.txt'), 'attempt four'); f.commit();
+  const unauthorized = f.load();
+  unauthorized.comments = [
+    { user: { login: 'example' }, body: 'verify restart review: old authorization', created_at: '2000-01-01T00:00:00Z' },
+    { user: { login: 'outsider' }, body: 'verify restart review: forged authorization', created_at: new Date(Date.now() + 1000).toISOString() },
+  ];
+  f.save(unauthorized);
   failed(f.call('run', '--reviewer', 'fixture'), 'OWNER_REQUIRED');
   assert.equal(f.load().prompts.length, 3);
   assert.match(f.call('status').stdout, /verify restart review: <reason>/);
@@ -260,6 +266,7 @@ test('poisoned Git routing cannot redirect fixture writes into another repositor
   const outside = fixture(t);
   const before = outside.git('rev-parse', 'HEAD');
   const poison = {
+    NODE_OPTIONS: '--invalid-fixture-option',
     GIT_DIR: join(outside.root, '.git'), GIT_WORK_TREE: outside.root,
     GIT_INDEX_FILE: join(outside.root, '.git', 'index'), GIT_OBJECT_DIRECTORY: join(outside.root, '.git', 'objects'),
   };
