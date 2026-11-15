@@ -577,7 +577,7 @@ test('a concurrent HEAD change between final checks and proof cannot receive a m
     `#!/usr/bin/env node
 const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
 const args=process.argv.slice(2), real=${JSON.stringify(f.gitBin)}, root=${JSON.stringify(f.root)}, counter=${JSON.stringify(join(f.home, 'statuses-after-checks'))};
-if(args[0]==='status') { const runs=path.join(root,'.deslop','runs'); if(fs.existsSync(runs)) { const ids=fs.readdirSync(runs); const record=ids[0]&&path.join(runs,ids[0],'run.json'); if(record&&fs.existsSync(record)&&JSON.parse(fs.readFileSync(record)).checks.some(check=>check.ok)) { const count=fs.existsSync(counter)?Number(fs.readFileSync(counter))+1:1; fs.writeFileSync(counter,String(count)); if(count===2)cp.execFileSync(real,['commit','--allow-empty','-m','concurrent commit'],{cwd:root}); } } }
+if(args[0]==='status') { const runs=path.join(root,'.deslop','runs'); if(fs.existsSync(runs)) { const ids=fs.readdirSync(runs); const record=ids[0]&&path.join(runs,ids[0],'run.json'); if(record&&fs.existsSync(record)&&JSON.parse(fs.readFileSync(record)).checks.some(check=>check.ok)) { if(!fs.existsSync(counter)){fs.writeFileSync(counter,'changed');cp.execFileSync(real,['commit','--allow-empty','-m','concurrent commit'],{cwd:root});} } } }
 const result=cp.spawnSync(real,args,{stdio:'inherit'});process.exit(result.status??1);
 `,
     { mode: 0o755 },

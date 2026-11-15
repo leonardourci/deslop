@@ -61,18 +61,23 @@ export async function runChecks({
   ci,
   head,
   attempt,
+  beforeCommand,
+  afterCommand,
 }) {
   const checks = [];
   if (!ci) {
-    for (const [index, name] of selection.commands.entries())
-      checks.push(
-        await commandCheck({
-          cwd,
-          name,
-          command: config.commands[name],
-          file: join(dir, `checks-${attempt}-${index}.log`),
-        }),
-      );
+    for (const [index, name] of selection.commands.entries()) {
+      const command = config.commands[name];
+      await beforeCommand?.({ command });
+      const check = await commandCheck({
+        cwd,
+        name,
+        command,
+        file: join(dir, `checks-${attempt}-${index}.log`),
+      });
+      await afterCommand?.({ command });
+      checks.push(check);
+    }
     return checks;
   }
   const states = await waitForChecks({ cwd, head, names: selection.checks });

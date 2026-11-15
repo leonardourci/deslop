@@ -43,6 +43,7 @@ const SHAPE = {
   newFiles: ['new.test.js'],
   checkFixes: [{ turn: 1, items: [] }],
   left: ['uncommitted.txt'],
+  unstableCommands: ['pnpm lint:fix'],
 };
 async function init({ places, options }) {
   const target = join(places.root, CONFIG_FILE);

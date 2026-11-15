@@ -225,7 +225,6 @@ async function performRun({ places, options }) {
       throw new DeslopError('UNFIXED', 'Agent left review findings unfixed');
     }
     let fixes = 0,
-      formatCommits = 0,
       checkedHead,
       finalChecks;
     for (;;) {
@@ -249,48 +248,53 @@ async function performRun({ places, options }) {
         await pushFixes({ cwd, ...info, expected: pushedHead });
         pushedHead = head;
       }
-      const beforeChecks = await gitState({ cwd });
-      const checks = await runChecks({
-        cwd,
-        dir,
-        config,
-        selection: currentSelection,
-        ci,
-        head,
-        attempt: data.checks.length,
-      });
-      data.checks.push(...checks);
-      save();
-      if ((await gitState({ cwd })) !== beforeChecks)
-        throw new DeslopError(
-          'CHECK_GIT',
-          'Checks changed git state; deslop refuses to commit, push or mark this run',
-        );
-      if ((await dirtyPaths({ cwd })).length) {
-        if (
-          await git({
-            cwd,
-            args: ['ls-files', '--others', '--exclude-standard'],
-          })
-        )
+      let expectedState = await gitState({ cwd });
+      let editedCommands = [];
+      const assertCheckState = async () => {
+        if ((await gitState({ cwd })) !== expectedState)
           throw new DeslopError(
-            'DIRTY_CHECKS',
-            `Checks created untracked files: ${(await dirtyPaths({ cwd })).join(', ')}`,
+            'CHECK_GIT',
+            'Checks changed git state; deslop refuses to commit, push or mark this run',
           );
-        if (formatCommits++ > 0)
-          throw new DeslopError(
-            'DIRTY_CHECKS',
-            'Checks repeatedly edit files; make the commands stable and rerun',
-          );
-        await commitEdits({ cwd, message: 'deslop: fix failing checks', data });
-        continue;
+      };
+      const checkSequence = async () => {
+        const checks = await runChecks({
+          cwd,
+          dir,
+          config,
+          selection: currentSelection,
+          ci,
+          head,
+          attempt: data.checks.length,
+          beforeCommand: assertCheckState,
+          afterCommand: async ({ command }) => {
+            await assertCheckState();
+            if (await commitEdits({ cwd, message: `deslop: ${command}`, data }))
+              editedCommands.push(command);
+            expectedState = await gitState({ cwd });
+          },
+        });
+        data.checks.push(...checks);
+        data.head = await git({ cwd, args: ['rev-parse', 'HEAD'] });
+        save();
+        await assertCheckState();
+        return checks;
+      };
+      let checks = await checkSequence();
+      if (!ci && editedCommands.length) {
+        editedCommands = [];
+        checks = await checkSequence();
+        data.unstableCommands = [
+          ...new Set([...(data.unstableCommands || []), ...editedCommands]),
+        ];
       }
+      const completedHead = data.head;
       if (checks.every((check) => check.ok)) {
         finalChecks = checks;
-        checkedHead = head;
+        checkedHead = completedHead;
         break;
       }
-      await invalidateVerdict({ head });
+      await invalidateVerdict({ head: completedHead });
       if (checks.some((check) => check.fixable === false))
         throw new DeslopError(
           'CI_STATE',
@@ -423,6 +427,8 @@ function printSummary({ data, path }) {
     console.log(`check: ${check.name} ${check.ok ? 'pass' : 'fail'}`);
   console.log(`review: found ${data.review.found}, fixed ${data.review.fixed}`);
   if (data.left?.length) console.log(`left: ${data.left.join(', ')}`);
+  if (data.unstableCommands?.length)
+    console.log(`unstable commands: ${data.unstableCommands.join(', ')}`);
   if (data.workflowEdits?.length)
     console.log(`workflows: ${data.workflowEdits.join(', ')}`);
   for (const item of data.review.items)

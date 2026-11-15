@@ -38,16 +38,18 @@ test('PR review prefers the remote base over a stale local base (p2)', (t) => {
   assert.doesNotMatch(f.load().calls[0].prompt, /landed-by-someone-else/);
 });
 
-test('passing checks cannot sweep an untracked artifact into a commit (p3)', (t) => {
+test('check artifacts are committed under the command that created them (p3, settled D1)', (t) => {
   const f = fixture(t);
-  f.config.commands.tests = `node -e "require('node:fs').writeFileSync('junit.xml','artifact')"`;
+  const command = `node -e "require('node:fs').writeFileSync('junit.xml','artifact')"`;
+  f.config.commands.tests = command;
   f.configure();
   f.commit();
   const head = f.git('rev-parse', 'HEAD');
-  const r = f.call('run', '--reviewer', 'fixture');
-  assert.equal(r.status, 1);
-  assert.match(r.stderr, /DIRTY_CHECKS/);
-  assert.equal(f.git('rev-parse', 'HEAD'), head);
+  pass(f.call('run', '--reviewer', 'fixture'));
+  assert.notEqual(f.git('rev-parse', 'HEAD'), head);
+  assert.equal(f.git('log', '-1', '--format=%s'), `deslop: ${command}`);
+  assert.equal(f.git('ls-files', 'junit.xml'), 'junit.xml');
+  pass(f.call('status'));
 });
 
 for (const conclusion of [
