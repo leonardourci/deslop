@@ -1,55 +1,45 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { delimiter, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { join, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
 const cli = fileURLToPath(new URL('../src/cli.js', import.meta.url));
-
 export function fixture(t) {
-  const home = mkdtempSync(join(tmpdir(), 'verify-test-'));
+  const home = mkdtempSync(join(tmpdir(), 'deslop-test-'));
   t.after(() => rmSync(home, { recursive: true, force: true }));
-  const root = join(home, 'repo');
-  const bin = join(home, 'bin');
+  const root = join(home, 'repo'), bin = join(home, 'bin'), stateFile = join(home, 'state.json');
   mkdirSync(root); mkdirSync(bin);
-  const gitName = process.platform === 'win32' ? 'git.exe' : 'git';
-  const gitExecutable = process.env.PATH.split(delimiter).map(directory => join(directory, gitName)).find(candidate => existsSync(candidate));
-  if (!gitExecutable) throw new Error('Git is required for the test fixtures');
-  symlinkSync(gitExecutable, join(bin, gitName));
-  symlinkSync(process.execPath, join(bin, process.platform === 'win32' ? 'node.exe' : 'node'));
-  const env = {
-    HOME: home, USERPROFILE: home, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
-    XDG_CONFIG_HOME: join(home, 'config'), XDG_CACHE_HOME: join(home, 'cache'), XDG_DATA_HOME: join(home, 'data'),
-    TMPDIR: home, TMP: home, TEMP: home, LC_ALL: 'C', PATH: bin, VERIFY_TEST_STATE: join(home, 'github.json'),
-  };
+  const gitBin = process.env.PATH.split(delimiter).map(path => join(path, 'git')).find(path => existsSync(path));
+  symlinkSync(gitBin, join(bin, 'git')); symlinkSync(process.execPath, join(bin, 'node'));
+  const env = { HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, 'config'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', PATH: bin, TMPDIR: home, TMP: home, TEMP: home, DESLOP_TEST_STATE: stateFile };
   if (process.env.SystemRoot) env.SystemRoot = process.env.SystemRoot;
-  for (const provider of ['codex', 'claude']) writeFileSync(join(bin, provider), '#!/usr/bin/env node\nconsole.error("fixture provider unavailable"); process.exit(78);\n', { mode: 0o755 });
-  function git(...args) { return execFileSync('git', args, { cwd: root, env, encoding: 'utf8' }).trim(); }
-  git('init', '-b', 'main');
-  git('config', 'user.name', 'Fixture'); git('config', 'user.email', 'fixture@example.invalid');
-  writeFileSync(join(root, 'base.txt'), 'base\n'); git('add', '.'); git('commit', '-m', 'base');
-  const base = git('rev-parse', 'HEAD'); git('switch', '-c', 'change');
-  const external = join(home, 'reviewer.cjs');
-  writeFileSync(external, `const fs = require('node:fs'); const state = JSON.parse(fs.readFileSync(process.env.VERIFY_TEST_STATE)); let prompt='';process.stdin.on('data',chunk=>prompt+=chunk);process.stdin.on('end',()=>{state.prompts ||= [];state.prompts.push(prompt); state.reviewContext={isolatedHome:process.env.HOME===require('node:path').dirname(process.env.VERIFY_TEST_STATE),isolatedGit:process.env.GIT_CONFIG_GLOBAL==='/dev/null',authKeys:Object.keys(process.env).filter(key=>/^(GH_TOKEN$|GITHUB_TOKEN$|ANTHROPIC_|OPENAI_|AWS_)/.test(key))}; state.reviewEnvs ||= []; state.reviewEnvs.push({model:process.env.VERIFY_REVIEWER_MODEL,effort:process.env.VERIFY_REVIEWER_EFFORT,worker:process.env.PNYX_ACTOR,thread:process.env.CODEX_THREAD_ID});const result=state.reviews.shift() || {findings:[]};fs.writeFileSync(process.env.VERIFY_TEST_STATE, JSON.stringify(state)); console.log(JSON.stringify(result));});`);
-  const config = { mode: 'local', steps: { test: `${JSON.stringify(process.execPath)} -e "process.exit(0)"` },
-    kinds: [{ name: 'code', match: ['**'], steps: ['test'], checks: ['Tests'], skills: [] }], skills: {}, reviewers: { fixture: { command: [process.execPath, external] } } };
+  const save = value => writeFileSync(stateFile, JSON.stringify({ ...value, github: [] }));
+  const load = () => ({ ...JSON.parse(readFileSync(stateFile, 'utf8')), github: readdirSync(home).filter(name => name.startsWith('gh-call-')).map(name => JSON.parse(readFileSync(join(home, name), 'utf8'))) });
+  const git = (...args) => execFileSync('git', args, { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const commit = () => { git('add', '.'); git('commit', '-m', 'fixture change'); return git('rev-parse', 'HEAD'); };
+  git('init', '-b', 'main'); git('config', 'user.name', 'Fixture'); git('config', 'user.email', 'fixture@example.invalid');
+  writeFileSync(join(root, 'base.txt'), 'base'); const base = commit(); git('switch', '-c', 'change');
+  const agent = join(home, 'agent.cjs');
+  const agentSource = `#!/usr/bin/env node
+const fs=require('node:fs'), cp=require('node:child_process'); const path=process.env.DESLOP_TEST_STATE; let prompt=''; process.stdin.on('data',v=>prompt+=v); process.stdin.on('end',()=>{ const state=JSON.parse(fs.readFileSync(path)); state.calls.push({prompt,args:process.argv.slice(2),model:process.env.DESLOP_REVIEWER_MODEL,effort:process.env.DESLOP_REVIEWER_EFFORT,parent:process.env.CODEX_THREAD_ID}); const action=state.actions.shift()||{}; if(action.edit)fs.writeFileSync('work.txt',action.edit); if(action.checks)state.checks=action.checks; if(action.git)cp.execFileSync('git',['commit','--allow-empty','-m','agent must not commit']); fs.writeFileSync(path,JSON.stringify(state)); const value=action.invalid?{wrong:true}:{items:action.items||[],sessionId:'session-fixture'}; const args=process.argv.slice(2); if(args.includes('--output-last-message')){fs.writeFileSync(args[args.indexOf('--output-last-message')+1],JSON.stringify(value));console.log(JSON.stringify({type:'thread.started',thread_id:'session-fixture'}));}else if(args.includes('--output-format'))console.log(JSON.stringify({structured_output:value,session_id:'session-fixture'}));else console.log(JSON.stringify(value)); });`;
+  writeFileSync(agent, agentSource, { mode: 0o755 });
+  writeFileSync(join(bin, 'codex'), agentSource, { mode: 0o755 }); writeFileSync(join(bin, 'claude'), agentSource, { mode: 0o755 });
   writeFileSync(join(bin, 'gh'), `#!/usr/bin/env node
-const fs=require('node:fs');const args=process.argv.slice(2);const path=process.env.VERIFY_TEST_STATE;function save(state){const temporary=path+'.'+process.pid+'.tmp';fs.writeFileSync(temporary,JSON.stringify(state));fs.renameSync(temporary,path);}const state=JSON.parse(fs.readFileSync(path));state.calls ||= [];state.calls.push(args);save(state);
-if(args[0]==='pr'&&args[1]==='view'){console.log(JSON.stringify(state.pr));}
-else if(args[0]==='pr'&&args[1]==='edit'){let body='';process.stdin.on('data',chunk=>body+=chunk);process.stdin.on('end',()=>{state.pr.body=body;save(state);});}
-else if(args[0]==='repo'){console.log(JSON.stringify({nameWithOwner:'example/project',owner:{login:'example'}}));}
-else if(args.includes('users/example')) console.log(JSON.stringify({type:state.ownerType || 'User'}));
-else if(args.some(arg=>arg.endsWith('/comments?per_page=100'))) console.log(JSON.stringify([state.comments||[]]));
-else if(args.some(arg=>arg.includes('/check-runs?'))) console.log(JSON.stringify([{check_runs:state.checks||[]}]));
-else if(args.some(arg=>arg.includes('/statuses?'))) console.log(JSON.stringify([state.statuses||[]]));
-else {console.error('unexpected gh '+JSON.stringify(args));process.exit(3);}
+const fs=require('node:fs');const path=process.env.DESLOP_TEST_STATE,args=process.argv.slice(2),s=JSON.parse(fs.readFileSync(path));fs.writeFileSync(require('node:path').join(require('node:path').dirname(path),'gh-call-'+process.pid+'-'+require('node:crypto').randomUUID()),JSON.stringify(args));
+if(args[0]==='pr'){if(!s.pr){console.error('no pull request');process.exit(1)}console.log(JSON.stringify(s.pr));}
+else if(args[0]==='repo')console.log(JSON.stringify({nameWithOwner:'example/project'}));
+else if(args.includes('--method'))console.log('{}');
+else if(args.some(a=>a.includes('/check-runs?')))console.log(JSON.stringify([{check_runs:s.checks}]));
+else if(args.some(a=>a.includes('/statuses?')))console.log('[[]]');
+else if(args[0]==='run')console.log('FAIL synthetic CI failure\\nassertion failed');
+else {console.error('unexpected gh args');process.exit(2)}
 `, { mode: 0o755 });
-  const state = { pr: { number: 1, url: 'https://github.com/example/project/pull/1', state: 'OPEN', headRefOid: '', baseRefOid: base, body: 'A useful change.' }, reviews: [] };
-  function save(value = state) { writeFileSync(env.VERIFY_TEST_STATE, JSON.stringify(value)); }
-  function load() { return JSON.parse(readFileSync(env.VERIFY_TEST_STATE, 'utf8')); }
-  function commit() { git('add', '.'); git('commit', '-m', 'change'); const next = load(); next.pr.headRefOid = git('rev-parse', 'HEAD'); save(next); }
-  function call(...args) { return spawnSync(process.execPath, [cli, ...args], { cwd: root, env, encoding: 'utf8' }); }
-  function configure() { writeFileSync(join(root, 'verify.config.json'), JSON.stringify(config)); mkdirSync(join(root, '.github/workflows'), { recursive: true }); writeFileSync(join(root, '.github/workflows/verify.yml'), 'name: Verify\n'); }
-  save(); configure(); writeFileSync(join(root, 'work.txt'), 'new\n'); commit();
-  return { root, home, env, git, config, save, load, commit, call, configure };
+  save({ actions: [], calls: [], github: [], checks: [{ id: 1, name: 'Tests', status: 'completed', conclusion: 'success' }] });
+  const config = { commands: { tests: 'node check.cjs' }, kinds: [{ name: 'code', match: ['**'], commands: ['tests'], checks: ['Tests'] }], reviewers: { fixture: { command: ['node', agent], resume: ['node', agent, '--resume', '{sessionId}'] } } };
+  const configure = () => writeFileSync(join(root, 'deslop.config.json'), JSON.stringify(config));
+  configure(); writeFileSync(join(root, 'work.txt'), 'good'); writeFileSync(join(root, 'check.cjs'), "if(require('node:fs').readFileSync('work.txt','utf8')!=='good'){console.error('FAIL work: expected good\\n'+Array(40).fill('failure detail').join('\\n'));process.exit(1)}console.log('passed')"); commit();
+  const call = (...args) => spawnSync(process.execPath, [cli, ...args], { cwd: root, env, encoding: 'utf8' });
+  const runs = () => readdirSync(join(root, '.deslop', 'runs')).map(id => JSON.parse(readFileSync(join(root, '.deslop', 'runs', id, 'run.json'), 'utf8')));
+  const push = () => { const remote = join(home, 'remote.git'); execFileSync('git', ['init', '--bare', remote], { env, stdio: 'ignore' }); git('remote', 'add', 'origin', remote); git('push', 'origin', `${base}:refs/heads/main`); git('push', '-u', 'origin', 'HEAD:refs/heads/change'); git('symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main'); };
+  return { home, root, env, config, configure, git, commit, call, load, save, runs, push, cli };
 }

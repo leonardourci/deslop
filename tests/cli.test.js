@@ -1,357 +1,146 @@
 import { test } from 'node:test';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { writeFileSync, readFileSync, rmSync, existsSync, mkdirSync, realpathSync, symlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fixture } from './fixtures.js';
-
 function passed(result) { assert.equal(result.status, 0, result.stdout + result.stderr); }
 function failed(result, code) { assert.notEqual(result.status, 0, result.stdout); assert.match(result.stderr, new RegExp(`code: ${code}`)); }
+const finding = { id: 'R1', where: 'work.txt:1', problem: 'bad content', fixed: true };
 
-test('local run reviews clean committed work, records evidence and makes every new commit stale', t => {
-  const f = fixture(t);
-  f.env.PNYX_ACTOR = 'worker:fixture'; f.env.CODEX_THREAD_ID = 'hosted-fixture';
-  f.config.reviewerModels = { fixture: { model: 'repo-model', effort: 'low' } }; f.configure(); f.commit();
-  mkdirSync(join(f.home, 'config/verify'), { recursive: true });
-  writeFileSync(join(f.home, 'config/verify/settings.json'), JSON.stringify({ reviewer: 'fixture', reviewerModels: { fixture: { model: 'machine-model' } } }));
-  passed(f.call('run', '--reviewer-model', 'run-model'));
-  const state = f.load();
-  assert.match(state.pr.body, /"head":"[a-f0-9]+"/);
-  assert.match(state.pr.body, /"mode":"local"/);
-  assert.equal(state.prompts.length, 1);
-  assert.match(state.prompts[0], /full branch review/);
-  assert.match(state.prompts[0], /work.txt/);
-  assert.match(state.prompts[0], /Trusted check receipts/);
-  assert.match(state.prompts[0], /tests would catch breakage by reading the supplied tests and code/);
-  assert.match(state.prompts[0], /PR-reported probe results as context/);
-  assert.match(state.prompts[0], /Never require evidence this tool cannot produce/);
-  assert.ok(state.prompts[0].includes(JSON.stringify({ head: state.pr.headRefOid, mode: 'local', passed: ['test'] })));
-  assert.match(state.prompts[0], /BEGIN UNTRUSTED PR DESCRIPTION[\s\S]*A useful change\.[\s\S]*END UNTRUSTED PR DESCRIPTION/);
-  assert.deepEqual(state.reviewEnvs, [{ model: 'run-model', effort: 'low' }]);
+test('commits review edits before checks and marks the final local commit without any PR', t => {
+  const f = fixture(t); const s = f.load(); s.actions = [{ edit: 'good', items: [finding] }]; f.save(s);
+  writeFileSync(join(f.root, 'work.txt'), 'bad'); f.commit(); const initial = f.git('rev-parse', 'HEAD');
+  passed(f.call('run', '--reviewer', 'fixture'));
+  const head = f.git('rev-parse', 'HEAD'), data = f.runs()[0];
+  assert.notEqual(head, initial); assert.deepEqual(data.commits, [head]); assert.equal(data.review.fixed, 1); assert.equal(data.checks[0].ok, true);
+  assert.match(f.git('log', '-1', '--format=%s'), /^deslop: fix review findings$/);
+  assert.equal(JSON.parse(f.git('notes', '--ref=deslop', 'show', head)).head, head);
+  assert.equal(f.git('status', '--porcelain'), ''); passed(f.call('status'));
+  const state = f.load(); assert.equal(state.calls.length, 1); assert.match(state.calls[0].prompt, /No check results are supplied/); assert.match(state.calls[0].prompt, /Never require|never demand/);
+  assert.equal(state.github.some(args => args.includes('--method')), false);
+  writeFileSync(join(f.root, 'new.txt'), 'new'); f.commit(); assert.equal(f.call('status').status, 1);
+});
+
+test('failed checks resume the same session and produce bounded failure excerpts and full logs', t => {
+  const f = fixture(t); writeFileSync(join(f.root, 'work.txt'), 'bad'); f.commit();
+  const s = f.load(); s.actions = [{}, { edit: 'good', items: [finding] }]; f.save(s);
+  passed(f.call('--reviewer', 'fixture'));
+  const calls = f.load().calls, data = f.runs()[0];
+  assert.equal(calls.length, 2); assert.deepEqual(calls[1].args, ['--resume', 'session-fixture']);
+  assert.match(calls[1].prompt, /FAIL work/);
+  assert.equal(data.checks[0].ok, false); assert.equal(data.checks[1].ok, true);
+  assert.ok(data.checks[0].failures[0].excerpt.split('\n').length <= 20);
+  assert.ok(readFileSync(join(f.root, data.checks[0].log), 'utf8').split('\n').length > 20);
+  passed(f.call('status')); assert.equal(data.commits.length, 1); assert.equal(f.git('log', '-1', '--format=%s'), 'deslop: fix failing checks');
+});
+
+test('attempt limits return failures without proof and zero makes no check-fix call', t => {
+  const f = fixture(t); f.config.checkFixAttempts = 0; f.configure(); writeFileSync(join(f.root, 'work.txt'), 'bad'); f.commit();
+  assert.equal(f.call('run', '--reviewer', 'fixture').status, 1); assert.equal(f.load().calls.length, 1); assert.equal(f.runs()[0].verdict, 'failed'); assert.equal(f.call('status').status, 1);
+  f.config.checkFixAttempts = 2; f.configure(); f.commit();
+  assert.equal(f.call('run', '--reviewer', 'fixture').status, 1); assert.equal(f.load().calls.length, 4); assert.equal(f.call('status').status, 1);
+});
+
+test('dirty work is refused in one line before any agent call and default branches are refused', t => {
+  const f = fixture(t); writeFileSync(join(f.root, 'untracked'), 'dirty');
+  const result = f.call('run', '--reviewer', 'fixture'); assert.equal(result.stderr.trim(), 'commit or stash your changes first'); assert.equal(f.load().calls.length, 0);
+  rmSync(join(f.root, 'untracked')); f.git('switch', 'main'); failed(f.call('run', '--reviewer', 'fixture'), 'BRANCH');
+});
+
+test('an agent trying to commit is detected and cannot receive a marker or push', t => {
+  const f = fixture(t); const s = f.load(); s.actions = [{ git: true }]; f.save(s);
+  failed(f.call('run', '--reviewer', 'fixture'), 'AGENT_GIT');
+  assert.equal(f.runs()[0].verdict, 'failed'); assert.equal(f.runs()[0].commits.length, 0); assert.equal(f.call('status').status, 1);
+  assert.equal(f.load().github.some(args => args.includes('--method')), false);
+});
+
+test('pushed CI runs push only review fixes and publish an exact-head status without a PR', t => {
+  const f = fixture(t); f.push(); const initial = f.git('rev-parse', 'HEAD');
+  const s = f.load(); s.actions = [{ edit: 'better', items: [finding] }]; f.save(s);
+  passed(f.call('run', '--reviewer', 'fixture'));
+  const head = f.git('rev-parse', 'HEAD'); assert.notEqual(head, initial);
+  assert.equal(f.git('ls-remote', 'origin', 'refs/heads/change').split(/\s/)[0], head);
+  const calls = f.load().github;
+  assert.ok(calls.some(args => args.includes(`repos/example/project/commits/${head}/check-runs?per_page=100`)));
+  assert.ok(calls.some(args => args.includes(`repos/example/project/statuses/${head}`) && args.includes('state=success')));
+  assert.equal(f.runs()[0].checks[0].name, 'Tests');
+  const red = f.load(); red.checks[0].conclusion = 'failure'; f.save(red);
+  assert.equal(f.call('run', '--reviewer', 'fixture').status, 1);
+  assert.equal(f.call('status').status, 1);
+});
+
+test('local override keeps fix commits local even when the starting commit was pushed', t => {
+  const f = fixture(t); f.push(); const initial = f.git('rev-parse', 'HEAD');
+  const s = f.load(); s.actions = [{ edit: 'good', items: [finding] }]; f.save(s);
+  writeFileSync(join(f.root, 'work.txt'), 'bad'); f.commit(); f.git('push', 'origin', 'HEAD:refs/heads/change'); const pushed = f.git('rev-parse', 'HEAD');
+  passed(f.call('run', '--local', '--reviewer', 'fixture')); assert.notEqual(f.git('rev-parse', 'HEAD'), initial);
+  assert.equal(f.git('ls-remote', 'origin', 'refs/heads/change').split(/\s/)[0], pushed);
+  assert.equal(f.load().github.some(args => args.includes('state=success')), false);
+});
+
+test('providers deny git tools, retain sessions, detect hosted Codex and apply model precedence', t => {
+  const f = fixture(t); f.env.CODEX_THREAD_ID = 'hosted';
+  f.config.reviewerModels = { codex: { model: 'repo', effort: 'high' } }; f.configure(); writeFileSync(join(f.root, 'work.txt'), 'bad'); f.commit();
+  const s = f.load(); s.actions = [{}, { edit: 'good', items: [finding] }]; f.save(s);
+  passed(f.call('run', '--reviewer-model', 'run'));
+  const calls = f.load().calls;
+  assert.ok(calls[0].args.includes('features.shell_tool=false')); assert.ok(calls[0].args.includes('sandbox_mode="workspace-write"'));
+  assert.ok(calls[0].args.includes('run')); assert.ok(calls[0].args.includes('model_reasoning_effort="high"'));
+  assert.ok(calls[1].args.includes('resume')); assert.ok(calls[1].args.includes('session-fixture')); assert.equal(calls[0].parent, undefined);
+  passed(f.call('run', '--reviewer', 'claude'));
+  const claude = f.load().calls.at(-1); assert.ok(claude.args.includes('Read,Glob,Grep,Edit,Write')); assert.match(claude.args[claude.args.indexOf('--settings')+1], /Write\(\*\*\/\.git/); assert.ok(claude.args.includes('--session-id'));
+});
+
+test('custom commands without resume get a fresh call explaining earlier commits', t => {
+  const f = fixture(t); delete f.config.reviewers.fixture.resume; f.configure(); writeFileSync(join(f.root, 'work.txt'), 'bad'); f.commit();
+  const s = f.load(); s.actions = [{}, { edit: 'good', items: [finding] }]; f.save(s);
+  passed(f.call('run', '--reviewer', 'fixture')); assert.match(f.load().calls[1].prompt, /Fresh fallback call/); assert.deepEqual(f.load().calls[1].args, []);
+});
+
+test('invalid agent output and unfixed items cannot create proof', t => {
+  const f = fixture(t); let s = f.load(); s.actions = [{ invalid: true }]; f.save(s);
+  failed(f.call('run', '--reviewer', 'fixture'), 'REVIEW_OUTPUT'); assert.equal(f.call('status').status, 1);
+  s = f.load(); s.actions = [{ items: [{ ...finding, fixed: false }] }]; f.save(s);
+  failed(f.call('run', '--reviewer', 'fixture'), 'UNFIXED'); assert.equal(f.call('status').status, 1);
+});
+
+test('base override wins over an open stacked PR base and no PR falls back locally', t => {
+  const f = fixture(t); f.git('branch', 'parent'); writeFileSync(join(f.root, 'later.txt'), 'later'); f.commit();
+  const s = f.load(); s.pr = { state: 'OPEN', baseRefName: 'parent' }; f.save(s);
+  passed(f.call('run', '--reviewer', 'fixture')); assert.doesNotMatch(f.load().calls[0].prompt, /diff --git a\/work.txt/);
+  passed(f.call('run', '--base', 'main', '--reviewer', 'fixture')); assert.match(f.load().calls[1].prompt, /diff --git a\/work.txt/);
+});
+
+test('init creates config without a workflow, repo wins, and shape works outside a repository', t => {
+  const f = fixture(t); rmSync(join(f.root, 'deslop.config.json')); f.commit();
+  passed(f.call('init', '--machine')); assert.equal(existsSync(join(f.root, 'deslop.config.json')), false);
+  passed(f.call('init')); assert.equal(existsSync(join(f.root, '.github/workflows')), false);
+  failed(f.call('init'), 'CONFIG');
+  const result = spawnSync(process.execPath, [f.cli, 'shape'], { cwd: f.home, env: f.env, encoding: 'utf8' }); passed(result); assert.match(result.stdout, /Potentially long/); assert.match(result.stdout, /20 lines/);
+});
+
+test('installed executable symlinks invoke the command and removed flags are rejected', t => {
+  const f = fixture(t); const bin = join(f.home, 'installed'); symlinkSync(f.cli, bin);
+  passed(spawnSync(process.execPath, [bin, 'shape'], { cwd: f.home, env: f.env, encoding: 'utf8' }));
+  failed(f.call('run', '--mode', 'local'), 'USAGE'); failed(f.call('run', '--decline', 'R1:reason'), 'USAGE'); failed(f.call('run', '--skip', 'tests'), 'USAGE');
+});
+
+
+test('failed CI resumes the agent, pushes only its fix and waits on the new exact head', t => {
+  const f = fixture(t); f.push(); const initial = f.git('rev-parse', 'HEAD');
+  const s = f.load(); s.checks[0].conclusion = 'failure'; s.actions = [{}, { edit: 'good\n', items: [finding], checks: [{ id: 2, name: 'Tests', status: 'completed', conclusion: 'success' }] }]; f.save(s);
+  passed(f.call('run', '--reviewer', 'fixture'));
+  const head = f.git('rev-parse', 'HEAD'); assert.notEqual(head, initial);
+  assert.deepEqual(f.load().calls[1].args, ['--resume', 'session-fixture']);
+  assert.equal(f.git('ls-remote', 'origin', 'refs/heads/change').split(/\s/)[0], head);
+  assert.ok(f.load().github.some(args => args.includes(`repos/example/project/commits/${head}/check-runs?per_page=100`)));
   passed(f.call('status'));
-  writeFileSync(join(f.root, 'uncommitted.txt'), 'dirty');
-  assert.equal(f.call('status').status, 1);
-  rmSync(join(f.root, 'uncommitted.txt'));
-  writeFileSync(join(f.root, 'README.md'), 'docs changed\n'); f.commit();
-  assert.equal(f.call('status').status, 1);
-  writeFileSync(join(f.root, 'dirty.txt'), 'dirty');
-  failed(f.call('run'), 'HEAD_CHANGED');
-  assert.equal(f.load().prompts.length, 1);
 });
 
-test('findings go back to the working agent, then a narrow review records fixed findings', t => {
-  const f = fixture(t);
-  const state = f.load(); state.reviews = [{ findings: [{ id: 'R1', where: 'work.txt:1', problem: 'Wrong content', fix: 'Use fixed content' }] }, { findings: [] }]; f.save(state);
-  failed(f.call('run', '--reviewer', 'fixture'), 'FINDINGS');
-  assert.doesNotMatch(f.load().pr.body, /verify:v1/);
-  writeFileSync(join(f.root, 'work.txt'), 'fixed content\n');
-  writeFileSync(join(f.root, 'unrelated.js'), 'export const unrelatedDefect = () => undefined.value;\n');
-  f.commit();
-  passed(f.call('run', '--reviewer', 'fixture'));
-  const after = f.load();
-  assert.match(after.prompts[1], /narrow follow-up/);
-  assert.match(after.prompts[1], /fixed content/);
-  assert.match(after.prompts[1], /unrelatedDefect/);
-  assert.match(after.prompts[1], /every newly introduced change/);
-  assert.match(after.pr.body, /"round":2/);
-  assert.match(f.call('status').stdout, /fixed: \["R1"\]/);
-});
-
-test('a failed local step or invalid reviewer output cannot write proof', t => {
-  const f = fixture(t);
-  f.config.steps.test = `${JSON.stringify(process.execPath)} -e "process.exit(1)"`; f.configure(); f.commit();
-  failed(f.call('run', '--reviewer', 'fixture'), 'COMMAND');
-  assert.equal(f.load().prompts, undefined);
-  f.config.steps.test = `${JSON.stringify(process.execPath)} -e "process.exit(0)"`; f.configure(); f.commit();
-  const state = f.load(); state.reviews = [{ clean: true }]; f.save(state);
-  failed(f.call('run', '--reviewer', 'fixture'), 'REVIEW_OUTPUT');
-  assert.doesNotMatch(f.load().pr.body, /verify:v1/);
-});
-
-test('CI waits only for selected exact-head checks and local fallback is visibly recorded or refused', t => {
-  const f = fixture(t); f.config.mode = 'ci'; f.configure(); f.commit();
-  const state = f.load(); state.checks = [{ id: 1, name: 'Tests', status: 'completed', conclusion: 'success' }, { id: 2, name: 'verify', status: 'queued' }, { id: 3, name: 'Unrelated', status: 'completed', conclusion: 'failure' }]; f.save(state);
-  passed(f.call('run', '--reviewer', 'fixture'));
-  assert.match(f.load().pr.body, /"mode":"ci"/);
-  assert.ok(f.load().prompts[0].includes(JSON.stringify({ head: f.load().pr.headRefOid, mode: 'ci', passed: ['Tests'] })));
-  passed(f.call('run', '--local', '--reviewer', 'fixture'));
-  assert.match(f.call('status').stdout, /ran locally/);
-  f.config.localRunCounts = false; f.configure(); f.commit();
-  failed(f.call('run', '--local', '--reviewer', 'fixture'), 'LOCAL_REFUSED');
-  const failing = f.load(); failing.checks[0].conclusion = 'failure'; f.save(failing);
-  failed(f.call('run', '--reviewer', 'fixture'), 'CI_FAILED');
-});
-
-test('configuration and unsupported switches fail before steps or reviews', t => {
-  const f = fixture(t);
-  failed(f.call('run', '--only', 'tests'), 'USAGE');
-  failed(f.call('run', '--skip', 'review'), 'USAGE');
-  failed(f.call('run'), 'REVIEWER');
-  f.config.localRunCounts = false; f.configure(); f.commit();
-  failed(f.call('run', '--reviewer', 'fixture'), 'CONFIG');
-  f.config.localRunCounts = true;
-  f.config.kinds[0].steps = ['missing']; f.configure(); f.commit();
-  failed(f.call('run', '--reviewer', 'fixture'), 'CONFIG');
-  f.config.kinds[0].steps = ['test']; f.config.kinds[0].skills = ['missing']; f.configure(); f.commit();
-  failed(f.call('run', '--reviewer', 'fixture'), 'CONFIG');
-  f.config.kinds[0].skills = []; f.config.kinds[0].checks = ['verify']; f.configure(); f.commit();
-  failed(f.call('run', '--reviewer', 'fixture'), 'CONFIG');
-  assert.equal(f.load().prompts, undefined);
-});
-
-test('init writes both repo files, machine init writes only config, and existing files survive', t => {
-  const f = fixture(t);
-  rmSync(join(f.root, 'verify.config.json')); rmSync(join(f.root, '.github'), { recursive: true });
-  passed(f.call('init', '--machine'));
-  assert.equal(existsSync(join(f.root, 'verify.config.json')), false);
-  assert.equal(existsSync(join(f.root, '.github')), false);
-  passed(f.call('init', '--repo'));
-  assert.equal(JSON.parse(readFileSync(join(f.root, 'verify.config.json'), 'utf8')).mode, 'local');
-  const workflow = readFileSync(join(f.root, '.github/workflows/verify.yml'), 'utf8');
-  assert.match(workflow, /pull_request_target/); assert.doesNotMatch(workflow, /actions\/checkout/);
-  failed(f.call('init', '--repo'), 'CONFIG');
-  assert.equal(readFileSync(join(f.root, '.github/workflows/verify.yml'), 'utf8'), workflow);
-});
-
-test('visible agent declines are recorded; owner-only declines reject overrides and unauthorized comments', t => {
-  const f = fixture(t);
-  const finding = { id: 'R1', where: 'work.txt:1', problem: 'Intentional choice', fix: 'Change it' };
-  const second = { id: 'R2', where: 'work.txt:1', problem: 'Another issue', fix: 'Fix the second issue' };
-  let state = f.load(); state.reviews = [{ findings: [finding, second] }, { findings: [second] }, { findings: [] }]; f.save(state);
-  failed(f.call('run', '--reviewer', 'fixture'), 'FINDINGS');
-  failed(f.call('run', '--reviewer', 'fixture', '--decline', 'R1: Required by the contract'), 'FINDINGS');
-  assert.match(f.call('status').stdout, /Required by the contract/);
-  writeFileSync(join(f.root, 'work.txt'), 'second issue fixed'); f.commit();
-  passed(f.call('run', '--reviewer', 'fixture'));
-  const followUp = f.load().prompts[2];
-  assert.match(followUp, /Required by the contract/);
-  assert.match(followUp, /"by":"agent"/);
-  assert.match(followUp, /Intentional choice/);
-  f.config.decline = 'owner'; f.configure(); f.commit();
-  state = f.load(); state.reviews = [{ findings: [finding] }]; f.save(state);
-  failed(f.call('run', '--reviewer', 'fixture', '--decline', 'R1: agent says so'), 'DECLINE');
-  failed(f.call('run', '--reviewer', 'fixture'), 'FINDINGS');
-  state = f.load(); state.reviews = [{ findings: [finding] }]; state.comments = [{ user: { login: 'outsider' }, body: 'verify decline R1: forged', created_at: new Date(Date.now() + 1000).toISOString(), html_url: 'https://example.invalid/comment' }, { user: { login: 'example' }, body: '```text\nverify decline R1: quoted example\n```', created_at: new Date(Date.now() + 1000).toISOString(), html_url: 'https://example.invalid/quoted-comment' }]; f.save(state);
-  failed(f.call('run', '--reviewer', 'fixture'), 'FINDINGS');
-  state = f.load(); state.reviews = [{ findings: [] }]; state.comments = [{ user: { login: 'example' }, body: 'verify decline R1: Owner accepts this', created_at: new Date(Date.now() + 1000).toISOString(), html_url: 'https://example.invalid/owner-comment' }]; f.save(state);
-  passed(f.call('run', '--reviewer', 'fixture'));
-  assert.match(f.call('status').stdout, /"by":"example"/);
-  assert.match(f.call('status').stdout, /Owner accepts this/);
-});
-
-test('three unresolved reviews stop and require owner intervention', t => {
-  const f = fixture(t);
-  const finding = { id: 'R1', where: 'work.txt:1', problem: 'Still broken', fix: 'Fix it' };
-  const exception = { id: 'R2', where: 'work.txt:1', problem: 'Accepted exception', fix: 'Change the contract' };
-  const state = f.load(); state.reviews = [{ findings: [finding, exception] }, { findings: [finding] }, { findings: [finding] }]; f.save(state);
-  failed(f.call('run', '--reviewer', 'fixture'), 'FINDINGS');
-  writeFileSync(join(f.root, 'work.txt'), 'attempt two'); f.commit();
-  failed(f.call('run', '--reviewer', 'fixture', '--decline', 'R2: This exception is part of the accepted contract'), 'FINDINGS');
-  writeFileSync(join(f.root, 'work.txt'), 'attempt three'); f.commit();
-  failed(f.call('run', '--reviewer', 'fixture'), 'OWNER_REQUIRED');
-  writeFileSync(join(f.root, 'work.txt'), 'attempt four'); f.commit();
-  const unauthorized = f.load();
-  unauthorized.comments = [
-    { user: { login: 'example' }, body: 'verify restart review: old authorization', created_at: '2000-01-01T00:00:00Z' },
-    { user: { login: 'outsider' }, body: 'verify restart review: forged authorization', created_at: new Date(Date.now() + 1000).toISOString() },
-    { user: { login: 'example' }, body: '```text\nverify restart review: quoted example\n```', created_at: new Date(Date.now() + 1000).toISOString() },
-  ];
-  f.save(unauthorized);
-  failed(f.call('run', '--reviewer', 'fixture'), 'OWNER_REQUIRED');
-  assert.equal(f.load().prompts.length, 3);
-  assert.match(f.call('status').stdout, /verify restart review: <reason>/);
-  const restart = f.load();
-  restart.comments = [{ user: { login: 'example' }, body: 'verify restart review: fixes are ready', created_at: new Date(Date.now() + 1000).toISOString(), html_url: 'https://example.invalid/restart' }];
-  restart.reviews = [{ findings: [] }]; f.save(restart);
-  passed(f.call('run', '--reviewer', 'fixture'));
-  assert.equal(f.load().prompts.length, 4);
-  assert.match(f.load().prompts[3], /full branch review/);
-  assert.match(f.load().prompts[3], /This exception is part of the accepted contract/);
-  assert.match(f.call('status').stdout, /This exception is part of the accepted contract/);
-  assert.match(f.call('status').stdout, /fixes are ready/);
-});
-
-test('a rerun that fails checks clears previous proof on the same head', t => {
-  const f = fixture(t);
-  f.config.mode = 'ci'; f.configure(); f.commit();
-  let state = f.load(); state.checks = [{ id: 1, name: 'Tests', status: 'completed', conclusion: 'success' }]; f.save(state);
-  passed(f.call('run', '--reviewer', 'fixture'));
-  passed(f.call('status'));
-  f.config.kinds[0].steps = ['missing']; f.configure();
-  failed(f.call('run', '--reviewer', 'fixture'), 'CONFIG');
-  assert.doesNotMatch(f.load().pr.body, /verify:v1/);
-  f.config.kinds[0].steps = ['test']; f.configure();
-  passed(f.call('run', '--reviewer', 'fixture'));
-  failed(f.call('run'), 'REVIEWER');
-  assert.doesNotMatch(f.load().pr.body, /verify:v1/);
-  passed(f.call('run', '--reviewer', 'fixture'));
-  state = f.load(); state.checks = [{ id: 2, name: 'Tests', status: 'completed', conclusion: 'failure' }]; f.save(state);
-  failed(f.call('run', '--reviewer', 'fixture'), 'CI_FAILED');
-  assert.equal(f.call('status').status, 1);
-});
-
-test('hosted Codex detection invokes fresh read-only provider with its model settings', t => {
-  const f = fixture(t);
-  f.env.CODEX_THREAD_ID = 'hosted-session'; f.env.PNYX_ACTOR = 'worker:fixture';
-  f.config.reviewerModels = { codex: { model: 'gpt-fixture', effort: 'high' } }; f.configure(); f.commit();
-  writeFileSync(join(f.home, 'bin/codex'), `#!/usr/bin/env node
-const fs=require('node:fs');const args=process.argv.slice(2);let prompt='';process.stdin.on('data',chunk=>prompt+=chunk);process.stdin.on('end',()=>{const path=process.env.VERIFY_TEST_STATE;const state=JSON.parse(fs.readFileSync(path));state.providerArgs=args;state.providerEnvironment={thread:process.env.CODEX_THREAD_ID,actor:process.env.PNYX_ACTOR};state.providerPrompt=prompt;fs.writeFileSync(path,JSON.stringify(state));fs.writeFileSync(args[args.indexOf('--output-last-message')+1],JSON.stringify({findings:[]}));});`, { mode: 0o755 });
-  passed(f.call('run'));
-  const state = f.load();
-  assert.equal(state.providerArgs[state.providerArgs.indexOf('--sandbox') + 1], 'read-only');
-  assert.equal(state.providerArgs[state.providerArgs.indexOf('--model') + 1], 'gpt-fixture');
-  assert.ok(state.providerArgs.includes('model_reasoning_effort="high"'));
-  assert.ok(state.providerArgs.includes('--ephemeral'));
-  assert.ok(state.providerArgs.includes('features.shell_tool=false'));
-  assert.deepEqual(state.providerEnvironment, {});
-  assert.match(state.providerPrompt, /work.txt/);
-  assert.match(state.pr.body, /"provider":"codex"/);
-});
-
-test('unavailable preferred reviewer falls back once, while malformed output cannot fall through to a clean reviewer', t => {
-  const f = fixture(t);
-  f.config.reviewers.unavailable = { command: [join(f.home, 'missing-reviewer')] }; f.configure(); f.commit();
-  mkdirSync(join(f.home, 'config/verify'), { recursive: true });
-  writeFileSync(join(f.home, 'config/verify/settings.json'), JSON.stringify({ reviewer: ['unavailable', 'fixture'], reviewerModels: { fixture: { model: 'fallback-model', effort: 'low' } } }));
+test('unavailable providers fall back with their own models rather than the primary override', t => {
+  const f = fixture(t); f.config.reviewers.missing = { command: ['missing-agent'] }; f.config.reviewerModels = { fixture: { model: 'fallback-model', effort: 'low' } }; f.configure(); f.commit();
+  mkdirSync(join(f.home, 'config/deslop'), { recursive: true }); writeFileSync(join(f.home, 'config/deslop/settings.json'), JSON.stringify({ reviewer: ['missing', 'fixture'] }));
   passed(f.call('run', '--reviewer-model', 'primary-model', '--reviewer-effort', 'high'));
-  assert.deepEqual(f.load().reviewEnvs, [{ model: 'fallback-model', effort: 'low' }]);
-  assert.match(f.load().pr.body, /"provider":"fixture"/);
-});
-
-test('changing config cannot bypass the three-round owner stop', t => {
-  const f = fixture(t);
-  const finding = { id: 'R1', where: 'work.txt:1', problem: 'Still wrong', fix: 'Fix it' };
-  const state = f.load(); state.reviews = [{ findings: [finding] }, { findings: [finding] }, { findings: [finding] }]; f.save(state);
-  failed(f.call('run', '--reviewer', 'fixture'), 'FINDINGS');
-  f.config.kinds[0].name = 'changed'; f.configure(); f.commit();
-  failed(f.call('run', '--reviewer', 'fixture'), 'FINDINGS');
-  f.config.kinds[0].name = 'changed again'; f.configure(); f.commit();
-  failed(f.call('run', '--reviewer', 'fixture'), 'OWNER_REQUIRED');
-  assert.match(f.load().prompts[1], /full branch review/);
-});
-
-test('invalid JSON shape from the preferred reviewer cannot fall through to a clean reviewer', t => {
-  const f = fixture(t);
-  f.config.reviewers.second = f.config.reviewers.fixture; f.configure(); f.commit();
-  mkdirSync(join(f.home, 'config/verify'), { recursive: true });
-  writeFileSync(join(f.home, 'config/verify/settings.json'), JSON.stringify({ reviewer: ['fixture', 'second'] }));
-  const state = f.load(); state.reviews = [{ clean: true }, { findings: [] }]; f.save(state);
-  failed(f.call('run'), 'REVIEW_OUTPUT');
-  assert.equal(f.load().prompts.length, 1);
-  assert.doesNotMatch(f.load().pr.body, /verify:v1/);
-});
-
-
-test('binary metadata is visible by default and strict repositories reject binary changes', t => {
-  const f = fixture(t);
-  writeFileSync(join(f.root, 'icon.bin'), Buffer.from([0, 1, 2, 3])); f.commit();
-  passed(f.call('run', '--reviewer', 'fixture'));
-  let marker = f.load().pr.body;
-  assert.match(marker, /binary files, not content-reviewed/);
-  assert.match(marker, /"path":"icon.bin","type":"bin","size":4,"change":"added"/);
-  assert.match(f.call('status').stdout, /binary files, not content-reviewed/);
-  assert.match(f.load().prompts[0], /icon.bin/);
-  const base = f.load(); base.pr.baseRefOid = f.git('rev-parse', 'HEAD'); f.save(base);
-  writeFileSync(join(f.root, 'icon.bin'), Buffer.from([0, 1, 2, 3, 4])); f.commit();
-  passed(f.call('run', '--reviewer', 'fixture'));
-  assert.match(f.load().pr.body, /"size":5,"change":"changed"/);
-  rmSync(join(f.root, 'icon.bin')); f.commit();
-  passed(f.call('run', '--reviewer', 'fixture'));
-  assert.match(f.load().pr.body, /"size":4,"change":"removed"/);
-  f.config.binary = 'fail'; f.configure(); f.commit();
-  failed(f.call('run', '--reviewer', 'fixture'), 'BINARY_EVIDENCE');
-  assert.doesNotMatch(f.load().pr.body, /verify:v1/);
-});
-
-
-test('test commands isolate home, Git configuration and default provider executables', t => {
-  const f = fixture(t);
-  passed(f.call('run', '--reviewer', 'fixture'));
-  assert.deepEqual(f.load().reviewContext, { isolatedHome: true, isolatedGit: true, authKeys: [] });
-  const unavailable = f.call('run', '--reviewer', 'claude');
-  failed(unavailable, 'REVIEW_UNAVAILABLE');
-  assert.match(unavailable.stderr, /fixture provider unavailable/);
-  assert.equal(f.call('status').status, 1);
-});
-
-test('poisoned Git routing cannot redirect fixture writes into another repository', t => {
-  const outside = fixture(t);
-  const before = outside.git('rev-parse', 'HEAD');
-  const poison = {
-    NODE_OPTIONS: '--invalid-fixture-option',
-    GIT_DIR: join(outside.root, '.git'), GIT_WORK_TREE: outside.root,
-    GIT_INDEX_FILE: join(outside.root, '.git', 'index'), GIT_OBJECT_DIRECTORY: join(outside.root, '.git', 'objects'),
-  };
-  const original = {};
-  for (const key of Object.keys(poison)) original[key] = process.env[key];
-  Object.assign(process.env, poison);
-  let isolated;
-  try { isolated = fixture(t); }
-  finally { for (const key of Object.keys(poison)) { if (original[key] === undefined) delete process.env[key]; else process.env[key] = original[key]; } }
-  assert.equal(isolated.git('rev-parse', '--show-toplevel'), realpathSync(isolated.root));
-  assert.equal(outside.git('rev-parse', 'HEAD'), before);
-  passed(isolated.call('run', '--reviewer', 'fixture'));
-});
-
-
-test('the installed command runs through its executable symlink', t => {
-  const f = fixture(t);
-  const entry = join(f.home, 'bin', 'verify');
-  symlinkSync(fileURLToPath(new URL('../src/cli.js', import.meta.url)), entry);
-  const result = spawnSync(entry, ['--help'], { cwd: f.root, env: f.env, encoding: 'utf8' });
-  passed(result);
-  assert.match(result.stdout, /verify init/);
-  assert.match(result.stdout, /verify run/);
-  assert.match(result.stdout, /verify status/);
-});
-
-test('Claude reviews are fresh and tool-free, reject malformed output and fall back only when unavailable', t => {
-  const f = fixture(t);
-  f.config.reviewerModels = { claude: { model: 'repo-claude', effort: 'low' }, fixture: { model: 'fallback-model' } };
-  f.configure(); f.commit();
-  writeFileSync(join(f.home, 'bin', 'claude'), `#!/usr/bin/env node
-const fs=require('node:fs');let prompt='';process.stdin.on('data',chunk=>prompt+=chunk);process.stdin.on('end',()=>{const path=process.env.VERIFY_TEST_STATE;const state=JSON.parse(fs.readFileSync(path));state.claudeArgs=process.argv.slice(2);state.claudePrompt=prompt;fs.writeFileSync(path,JSON.stringify(state));if(state.badClaude){console.log('not JSON');return;}console.log(JSON.stringify(state.unavailableClaude?{is_error:true}:{is_error:false,structured_output:{findings:[]}}));});`, { mode: 0o755 });
-  passed(f.call('run', '--reviewer', 'claude', '--reviewer-model', 'run-claude', '--reviewer-effort', 'high'));
-  const first = f.load();
-  assert.equal(first.claudeArgs[first.claudeArgs.indexOf('--model') + 1], 'run-claude');
-  assert.equal(first.claudeArgs[first.claudeArgs.indexOf('--effort') + 1], 'high');
-  assert.equal(first.claudeArgs[first.claudeArgs.indexOf('--tools') + 1], '');
-  assert.ok(first.claudeArgs.includes('--safe-mode'));
-  assert.ok(first.claudeArgs.includes('--no-session-persistence'));
-  assert.ok(first.claudeArgs.includes('--strict-mcp-config'));
-  assert.match(first.claudePrompt, /work.txt/);
-  assert.match(first.pr.body, /"provider":"claude"/);
-  mkdirSync(join(f.home, 'config', 'verify'), { recursive: true });
-  writeFileSync(join(f.home, 'config', 'verify', 'settings.json'), JSON.stringify({ reviewer: ['claude', 'fixture'] }));
-  first.badClaude = true; f.save(first);
-  failed(f.call('run'), 'REVIEW_OUTPUT');
-  assert.equal(f.load().reviewEnvs, undefined);
-  assert.doesNotMatch(f.load().pr.body, /verify:v1/);
-  const unavailable = f.load(); unavailable.badClaude = false; unavailable.unavailableClaude = true; f.save(unavailable);
-  passed(f.call('run', '--reviewer-model', 'primary-model'));
-  assert.deepEqual(f.load().reviewEnvs, [{ model: 'fallback-model' }]);
-  assert.match(f.load().pr.body, /"provider":"fixture"/);
-});
-
-test('a remote head change during checks cannot pass stale receipts to the reviewer', t => {
-  const f = fixture(t);
-  const move = join(f.home, 'move-head.cjs');
-  writeFileSync(move, `const fs = require('node:fs'); const file = process.env.VERIFY_TEST_STATE; const state = JSON.parse(fs.readFileSync(file)); state.pr.headRefOid = 'b'.repeat(40); fs.writeFileSync(file, JSON.stringify(state));`);
-  f.config.steps.test = `node ${JSON.stringify(move)}`; f.configure(); f.commit();
-  failed(f.call('run', '--reviewer', 'fixture'), 'HEAD_CHANGED');
-  assert.equal(f.load().prompts, undefined);
-  assert.doesNotMatch(f.load().pr.body, /verify:v1/);
-});
-
-test('a code-changing head with missing CI fails closed rather than producing proof', t => {
-  const f = fixture(t);
-  const script = `import { waitForChecks } from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)};
-try { await waitForChecks({ cwd: process.cwd(), head: process.argv[1], names: ['Tests'], timeoutMs: 150, pollMs: 1 }); process.exit(0); }
-catch (error) { console.error('code: ' + error.code); process.exit(1); }`;
-  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script, f.load().pr.headRefOid], { cwd: f.root, env: f.env, encoding: 'utf8' });
-  failed(result, 'CI_WAIT');
-  assert.match(result.stdout, /missing/);
-  assert.equal(f.load().prompts, undefined);
-  assert.doesNotMatch(f.load().pr.body, /verify:v1/);
+  assert.equal(f.load().calls[0].model, 'fallback-model'); assert.equal(f.load().calls[0].effort, 'low');
 });

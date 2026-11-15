@@ -8,8 +8,8 @@ import { join } from 'node:path';
 const module = new URL('../src/local.js', import.meta.url).href;
 
 function worker({ home, exclusive = false }) {
-  const call = exclusive ? `exclusiveRun({file:${JSON.stringify(join(home, 'active.sqlite'))},work})` : `localSlot({home:${JSON.stringify(home)},limit:1,work})`;
-  const child = spawn(process.execPath, ['--input-type=module', '-e', `import {localSlot,exclusiveRun} from ${JSON.stringify(module)};const work=async()=>{console.log('entered');process.stdin.resume();await new Promise(resolve=>process.stdin.once('end',resolve));};await ${call};`], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const call = `exclusiveRun({file:${JSON.stringify(join(home, 'active.sqlite'))},work})`;
+  const child = spawn(process.execPath, ['--input-type=module', '-e', `import {exclusiveRun} from ${JSON.stringify(module)};const work=async()=>{console.log('entered');process.stdin.resume();await new Promise(resolve=>process.stdin.once('end',resolve));};await ${call};`], { stdio: ['pipe', 'pipe', 'pipe'] });
   let stdout = '';
   let stderr = '';
   const pending = [];
@@ -26,26 +26,8 @@ function worker({ home, exclusive = false }) {
   return { child, done, wait, output: () => stdout };
 }
 
-test('machine local limit queues runs across repos and recovers a dead holder', async t => {
-  const home = mkdtempSync(join(tmpdir(), 'verify-queue-'));
-  const children = [];
-  t.after(async () => { for (const run of children) if (run.child.exitCode === null) run.child.kill('SIGKILL'); await Promise.all(children.map(run => run.done)); rmSync(home, { recursive: true, force: true }); });
-  const first = worker({ home }); children.push(first);
-  await first.wait('entered');
-  const second = worker({ home }); children.push(second);
-  await second.wait('queued:');
-  assert.doesNotMatch(second.output(), /entered/);
-  first.child.kill('SIGKILL'); await first.done;
-  await second.wait('entered');
-  second.child.stdin.end();
-  await second.done;
-  const third = worker({ home }); children.push(third);
-  await third.wait('entered'); third.child.stdin.end(); await third.done;
-});
-
-
 test('a checkout admits only one verification writer and releases its lock after completion', async t => {
-  const home = mkdtempSync(join(tmpdir(), 'verify-exclusive-'));
+  const home = mkdtempSync(join(tmpdir(), 'deslop-exclusive-'));
   const children = [];
   t.after(async () => { for (const run of children) if (run.child.exitCode === null) run.child.kill('SIGKILL'); await Promise.allSettled(children.map(run => run.done)); rmSync(home, { recursive: true, force: true }); });
   const first = worker({ home, exclusive: true }); children.push(first);
