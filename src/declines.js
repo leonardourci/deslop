@@ -1,6 +1,14 @@
 import { github } from './github.js';
 import { VerifyError } from './process.js';
 
+const RESTART_COMMAND = /^verify restart review:[ \t]*(\S[^\r\n]*)$/;
+const DECLINE_COMMAND = /^verify decline ([^:\s]+):[ \t]*(\S[^\r\n]*)$/;
+
+function ownerCommand({ body, pattern }) {
+  if (typeof body !== 'string') return null;
+  return pattern.exec(body.trim());
+}
+
 export function findingKey({ finding }) {
   return JSON.stringify([finding.id, finding.where, finding.problem, finding.fix]);
 }
@@ -18,10 +26,11 @@ async function ownerComments({ cwd, config, pr }) {
 
 export async function restartFor({ cwd, config, pr, previous }) {
   const comments = await ownerComments({ cwd, config, pr });
-  const comment = comments.filter(comment => Date.parse(comment.created_at) > Date.parse(previous.finishedAt)
-    && /^verify restart review:\s*\S[^\r\n]*$/m.test(comment.body)).at(-1);
-  if (!comment) throw new VerifyError('OWNER_REQUIRED', 'Three rounds are not clean. An owner must comment: verify restart review: <reason>');
-  return { by: comment.user.login, reason: /^verify restart review:\s*(\S[^\r\n]*)$/m.exec(comment.body)[1], url: comment.html_url };
+  const requests = comments.map(comment => ({ comment, command: ownerCommand({ body: comment.body, pattern: RESTART_COMMAND }) }));
+  const recent = requests.filter(request => request.command && Date.parse(request.comment.created_at) > Date.parse(previous.finishedAt));
+  const request = recent.at(-1);
+  if (!request) throw new VerifyError('OWNER_REQUIRED', 'Three rounds are not clean. An owner must comment: verify restart review: <reason>');
+  return { by: request.comment.user.login, reason: request.command[1], url: request.comment.html_url };
 }
 
 export async function declinesFor({ cwd, config, pr, previous, arguments: requested = [] }) {
@@ -37,7 +46,7 @@ export async function declinesFor({ cwd, config, pr, previous, arguments: reques
   const comments = await ownerComments({ cwd, config, pr });
   const accepted = [];
   for (const comment of comments) {
-    const match = /^verify decline ([^:\s]+):\s*(\S[^\r\n]*)$/m.exec(comment.body);
+    const match = ownerCommand({ body: comment.body, pattern: DECLINE_COMMAND });
     const finding = previous.find(item => item.id === match?.[1]);
     if (!finding || Date.parse(comment.created_at) < Date.parse(finding.reportedAt)) continue;
     accepted.push({ id: finding.id, finding: findingKey({ finding }), by: comment.user.login, reason: match[2], url: comment.html_url });

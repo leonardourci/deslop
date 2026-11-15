@@ -110,7 +110,7 @@ Model and effort selection for each provider: CLI override, machine settings, re
 
 ## Findings and follow-up
 
-Every finding includes its ID, location, problem and suggested fix, without severities. Fix every finding, commit, push, and run again. Round two checks the fixes, every newly introduced change, and their regressions. Three rounds with findings stop verification. An owner can start a new full cycle by commenting `verify restart review: <reason>` on the PR. The same owner-login rules apply, and status records who restarted the review and why. Run state stays in the checkout's Git directory.
+Every finding includes its ID, location, problem and suggested fix, without severities. Fix every finding, commit, push, and run again. Round two checks the fixes, every newly introduced change, and their regressions. Three rounds with findings stop verification. An owner can start a new full cycle with a standalone plain-text comment `verify restart review: <reason>` on the PR. The same owner-login rules apply, and status records who restarted the review and why. Run state stays in the checkout's Git directory.
 
 To decline an incorrect finding with a visible reason:
 
@@ -118,7 +118,7 @@ To decline an incorrect finding with a visible reason:
 verify run --decline "R1: The caller validates this value before invoking the function"
 ```
 
-With `decline: "owner"`, CLI declines are refused. Only a repository owner's PR comment counts:
+With `decline: "owner"`, CLI declines are refused. Only a repository owner's standalone plain-text PR comment counts:
 
 ```text
 verify decline R1: The caller validates this value before invoking the function

@@ -125,7 +125,7 @@ test('visible agent declines are recorded; owner-only declines reject overrides 
   state = f.load(); state.reviews = [{ findings: [finding] }]; f.save(state);
   failed(f.call('run', '--reviewer', 'fixture', '--decline', 'R1: agent says so'), 'DECLINE');
   failed(f.call('run', '--reviewer', 'fixture'), 'FINDINGS');
-  state = f.load(); state.reviews = [{ findings: [finding] }]; state.comments = [{ user: { login: 'outsider' }, body: 'verify decline R1: forged', created_at: new Date(Date.now() + 1000).toISOString(), html_url: 'https://example.invalid/comment' }]; f.save(state);
+  state = f.load(); state.reviews = [{ findings: [finding] }]; state.comments = [{ user: { login: 'outsider' }, body: 'verify decline R1: forged', created_at: new Date(Date.now() + 1000).toISOString(), html_url: 'https://example.invalid/comment' }, { user: { login: 'example' }, body: '```text\nverify decline R1: quoted example\n```', created_at: new Date(Date.now() + 1000).toISOString(), html_url: 'https://example.invalid/quoted-comment' }]; f.save(state);
   failed(f.call('run', '--reviewer', 'fixture'), 'FINDINGS');
   state = f.load(); state.reviews = [{ findings: [] }]; state.comments = [{ user: { login: 'example' }, body: 'verify decline R1: Owner accepts this', created_at: new Date(Date.now() + 1000).toISOString(), html_url: 'https://example.invalid/owner-comment' }]; f.save(state);
   passed(f.call('run', '--reviewer', 'fixture'));
@@ -148,6 +148,7 @@ test('three unresolved reviews stop and require owner intervention', t => {
   unauthorized.comments = [
     { user: { login: 'example' }, body: 'verify restart review: old authorization', created_at: '2000-01-01T00:00:00Z' },
     { user: { login: 'outsider' }, body: 'verify restart review: forged authorization', created_at: new Date(Date.now() + 1000).toISOString() },
+    { user: { login: 'example' }, body: '```text\nverify restart review: quoted example\n```', created_at: new Date(Date.now() + 1000).toISOString() },
   ];
   f.save(unauthorized);
   failed(f.call('run', '--reviewer', 'fixture'), 'OWNER_REQUIRED');
