@@ -24,9 +24,9 @@ export function fixture(t) {
   const config = { mode: 'local', steps: { test: `${JSON.stringify(process.execPath)} -e "process.exit(0)"` },
     kinds: [{ name: 'code', match: ['**'], steps: ['test'], checks: ['Tests'], skills: [] }], skills: {}, reviewers: { fixture: { command: [process.execPath, external] } } };
   writeFileSync(join(bin, 'gh'), `#!/usr/bin/env node
-const fs=require('node:fs');const args=process.argv.slice(2);const path=process.env.VERIFY_TEST_STATE;const state=JSON.parse(fs.readFileSync(path));state.calls ||= [];state.calls.push(args);fs.writeFileSync(path,JSON.stringify(state));
+const fs=require('node:fs');const args=process.argv.slice(2);const path=process.env.VERIFY_TEST_STATE;function save(state){const temporary=path+'.'+process.pid+'.tmp';fs.writeFileSync(temporary,JSON.stringify(state));fs.renameSync(temporary,path);}const state=JSON.parse(fs.readFileSync(path));state.calls ||= [];state.calls.push(args);save(state);
 if(args[0]==='pr'&&args[1]==='view'){console.log(JSON.stringify(state.pr));}
-else if(args[0]==='pr'&&args[1]==='edit'){let body='';process.stdin.on('data',chunk=>body+=chunk);process.stdin.on('end',()=>{state.pr.body=body;fs.writeFileSync(path,JSON.stringify(state));});}
+else if(args[0]==='pr'&&args[1]==='edit'){let body='';process.stdin.on('data',chunk=>body+=chunk);process.stdin.on('end',()=>{state.pr.body=body;save(state);});}
 else if(args[0]==='repo'){console.log(JSON.stringify({nameWithOwner:'example/project',owner:{login:'example'}}));}
 else if(args.includes('users/example')) console.log(JSON.stringify({type:state.ownerType || 'User'}));
 else if(args.some(arg=>arg.endsWith('/comments?per_page=100'))) console.log(JSON.stringify([state.comments||[]]));
