@@ -223,6 +223,8 @@ export async function review({
             args,
             input: prompt,
             env: clean,
+            timeoutMs,
+            timeoutCode: 'AGENT_TIMEOUT',
           }),
         );
         if (envelope.is_error)
@@ -279,10 +281,7 @@ export async function review({
         !['ENOENT', 'COMMAND', 'REVIEW_UNAVAILABLE'].includes(error.code)
       )
         throw error;
-      if (
-        error.code !== 'ENOENT' &&
-        (!before || before !== (await providerState({ cwd })))
-      )
+      if (!before || before !== (await providerState({ cwd })))
         throw error;
       errors.push(`${provider}: ${error.message}`);
     } finally {

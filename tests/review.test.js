@@ -1,9 +1,32 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { review } from '../src/review.js';
+import { fixture } from './fixtures.js';
+
+test('Claude honors the agent timeout and reports AGENT_TIMEOUT', async (t) => {
+  const f = fixture(t);
+  writeFileSync(
+    join(f.bin, 'claude'),
+    '#!/usr/bin/env node\nprocess.stdin.resume();setInterval(()=>{},1000);',
+    { mode: 0o755 },
+  );
+  await assert.rejects(
+    review({
+      cwd: f.root,
+      common: join(f.root, '.git'),
+      choices: ['claude'],
+      config: f.config,
+      settings: {},
+      prompt: '',
+      env: f.env,
+      timeoutMs: 100,
+    }),
+    { code: 'AGENT_TIMEOUT' },
+  );
+});
 
 test('custom resumes retain the latest returned session id', async (t) => {
   const cwd = mkdtempSync(join(tmpdir(), 'deslop-provider-'));

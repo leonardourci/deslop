@@ -6,6 +6,29 @@ import { spawnSync } from 'node:child_process';
 import { fixture } from './fixtures.js';
 const pass = (r) => assert.equal(r.status, 0, r.stdout + r.stderr);
 
+test('a missing Codex result after edits stops before fallback', (t) => {
+  const f = fixture(t);
+  writeFileSync(
+    join(f.bin, 'codex'),
+    `#!/usr/bin/env node
+process.stdin.resume();process.stdin.on('end',()=>{require('node:fs').writeFileSync('work.txt','partial');});
+`,
+    { mode: 0o755 },
+  );
+  mkdirSync(join(f.home, 'config/deslop'), { recursive: true });
+  writeFileSync(
+    join(f.home, 'config/deslop/settings.json'),
+    JSON.stringify({ reviewer: ['codex', 'fixture'] }),
+  );
+  const result = f.call('run');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /ENOENT/);
+  assert.equal(f.load().calls.length, 0);
+  assert.equal(readFileSync(join(f.root, 'work.txt'), 'utf8'), 'partial');
+  assert.deepEqual(f.runs()[0].commits, []);
+  assert.equal(f.call('status').status, 1);
+});
+
 test('sibling branch config writes during checks do not invalidate this checkout (p1)', (t) => {
   const f = fixture(t);
   f.config.commands.tests = 'git config branch.peer.remote origin';
