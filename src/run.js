@@ -291,7 +291,11 @@ async function performRun({ places, options }) {
           ...new Set([...(data.unstableCommands || []), ...editedCommands]),
         ];
       }
-      if (!ci && currentSelection.requiredChecks.length) {
+      if (
+        !ci &&
+        checks.every((check) => check.ok) &&
+        currentSelection.requiredChecks.length
+      ) {
         const ciHead = data.head;
         if (
           (await remoteHead({ cwd, branch: info.branch }).catch(() => null)) !==

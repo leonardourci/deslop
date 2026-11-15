@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixture } from './fixtures.js';
 const pass = (r) => assert.equal(r.status, 0, r.stdout + r.stderr);
@@ -173,3 +173,65 @@ test('status publication preserves the explicit review base check selection', (t
   pass(f.call('status', '--publish'));
   assert.equal(successes(f).length, 1);
 });
+
+for (const passName of ['initial', 'proof'])
+  test(`${passName} local failures resume repair before required CI`, (t) => {
+    const f = fixture(t);
+    f.config.kinds[0].ciRequired = true;
+    if (passName === 'proof') {
+      writeFileSync(
+        join(f.root, 'format.cjs'),
+        "require('node:fs').writeFileSync('formatted.txt','formatted')",
+      );
+      f.config.commands.format = 'node format.cjs';
+      f.config.kinds[0].commands = ['format', 'tests'];
+    }
+    writeFileSync(join(f.root, 'work.txt'), 'bad');
+    f.configure();
+    f.commit();
+    f.push();
+    const s = f.load();
+    s.checks[0].conclusion = 'skipped';
+    s.actions = [{}, { edit: 'good' }];
+    f.save(s);
+
+    const result = f.call('run', '--local', '--reviewer', 'fixture');
+    const calls = f.load().calls;
+    assert.equal(calls.length, 2, result.stdout + result.stderr);
+    assert.deepEqual(calls[1].args, ['--resume', 'session-fixture']);
+    assert.match(calls[1].prompt, /FAIL work/);
+    assert.equal(readFileSync(join(f.root, 'work.txt'), 'utf8'), 'good');
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /CI_REQUIRED/);
+    assert.match(result.stderr, /push.*rerun/);
+    assert.equal(
+      f
+        .load()
+        .github.some((args) =>
+          args.some((arg) => arg.includes('/check-runs?')),
+        ),
+      false,
+    );
+    const data = f.runs()[0];
+    assert.equal(data.checks.at(-1).ok, true);
+    assert.equal(
+      f.git('show', '-s', '--format=%s', data.commits.at(-1)),
+      'deslop: fix failing checks',
+    );
+    if (passName === 'proof') {
+      assert.equal(
+        f.git('show', '-s', '--format=%s', data.commits[0]),
+        'deslop: node format.cjs',
+      );
+      assert.equal(
+        f.git(
+          'diff-tree',
+          '--no-commit-id',
+          '--name-only',
+          '-r',
+          data.commits[0],
+        ),
+        'formatted.txt',
+      );
+    }
+  });
