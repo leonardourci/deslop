@@ -137,7 +137,7 @@ test('pushed CI runs push only review fixes and publish an exact-head status wit
   const calls = f.load().github;
   assert.ok(calls.some(args => args.includes(`repos/example/project/commits/${head}/check-runs?per_page=100`)));
   assert.ok(calls.some(args => args.includes(`repos/example/project/statuses/${head}`) && args.includes('state=success')));
-  assert.deepEqual(f.runs()[0].checks.map(check => check.name), ['tests', 'Tests']);
+  assert.deepEqual(f.runs()[0].checks.map(check => check.name), ['Tests']);
   const red = f.load(); red.checks[0].conclusion = 'failure'; f.save(red);
   assert.equal(f.call('run', '--reviewer', 'fixture').status, 1);
   assert.equal(f.call('status').status, 1);

@@ -25,12 +25,13 @@ async function commandCheck({ cwd, name, command, file }) {
 }
 export async function runChecks({ cwd, dir, config, selection, ci, head, attempt }) {
   const checks = [];
-  for (const [index, name] of selection.commands.entries()) checks.push(await commandCheck({ cwd, name, command: config.commands[name], file: join(dir, `checks-${attempt}-${index}.log`) }));
-  if (!ci) return checks;
+  if (!ci) {
+    for (const [index, name] of selection.commands.entries()) checks.push(await commandCheck({ cwd, name, command: config.commands[name], file: join(dir, `checks-${attempt}-${index}.log`) }));
+    return checks;
+  }
   const states = await waitForChecks({ cwd, head, names: selection.checks });
-  const offset = checks.length;
   for (const [index, state] of states.entries()) {
-    const file = join(dir, `checks-${attempt}-${offset + index}.log`);
+    const file = join(dir, `checks-${attempt}-${index}.log`);
     const ok = state.state === 'success';
     let output = `${state.name}: ${state.state}\n`;
     const run = state.url?.match(/\/actions\/runs\/(\d+)/)?.[1];
