@@ -22,6 +22,9 @@ test('local run reviews clean committed work, records evidence and makes every n
   assert.equal(state.prompts.length, 1);
   assert.match(state.prompts[0], /full branch review/);
   assert.match(state.prompts[0], /work.txt/);
+  assert.match(state.prompts[0], /Trusted check receipts/);
+  assert.ok(state.prompts[0].includes(JSON.stringify({ head: state.pr.headRefOid, mode: 'local', passed: ['test'] })));
+  assert.match(state.prompts[0], /BEGIN UNTRUSTED PR DESCRIPTION[\s\S]*A useful change\.[\s\S]*END UNTRUSTED PR DESCRIPTION/);
   assert.deepEqual(state.reviewEnvs, [{ model: 'run-model', effort: 'low' }]);
   passed(f.call('status'));
   writeFileSync(join(f.root, 'uncommitted.txt'), 'dirty');
@@ -68,6 +71,7 @@ test('CI waits only for selected exact-head checks and local fallback is visibly
   const state = f.load(); state.checks = [{ id: 1, name: 'Tests', status: 'completed', conclusion: 'success' }, { id: 2, name: 'verify', status: 'queued' }, { id: 3, name: 'Unrelated', status: 'completed', conclusion: 'failure' }]; f.save(state);
   passed(f.call('run', '--reviewer', 'fixture'));
   assert.match(f.load().pr.body, /"mode":"ci"/);
+  assert.ok(f.load().prompts[0].includes(JSON.stringify({ head: f.load().pr.headRefOid, mode: 'ci', passed: ['Tests'] })));
   passed(f.call('run', '--local', '--reviewer', 'fixture'));
   assert.match(f.call('status').stdout, /ran locally/);
   f.config.localRunCounts = false; f.configure(); f.commit();
@@ -326,3 +330,14 @@ const fs=require('node:fs');let prompt='';process.stdin.on('data',chunk=>prompt+
   assert.deepEqual(f.load().reviewEnvs, [{ model: 'fallback-model' }]);
   assert.match(f.load().pr.body, /"provider":"fixture"/);
 });
+
+test('a remote head change during checks cannot pass stale receipts to the reviewer', t => {
+  const f = fixture(t);
+  const move = join(f.home, 'move-head.cjs');
+  writeFileSync(move, `const fs = require('node:fs'); const file = process.env.VERIFY_TEST_STATE; const state = JSON.parse(fs.readFileSync(file)); state.pr.headRefOid = 'b'.repeat(40); fs.writeFileSync(file, JSON.stringify(state));`);
+  f.config.steps.test = `node ${JSON.stringify(move)}`; f.configure(); f.commit();
+  failed(f.call('run', '--reviewer', 'fixture'), 'HEAD_CHANGED');
+  assert.equal(f.load().prompts, undefined);
+  assert.doesNotMatch(f.load().pr.body, /verify:v1/);
+});
+

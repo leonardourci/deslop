@@ -82,8 +82,10 @@ async function performRun({ places, options, env }) {
     stepNames = await localSlot({ home: places.home, limit: settings.maxLocalRuns, work: async () => await runSteps({ cwd, names: selection.steps, commands: config.steps, assertHead: async () => await cleanHead({ cwd, head }) }) });
   } else stepNames = await waitForChecks({ cwd, head, names: selection.checks });
   await cleanHead({ cwd, head });
+  const currentPr = await pullRequest({ cwd });
+  if (currentPr.headRefOid !== head) throw new VerifyError('HEAD_CHANGED', 'PR head changed before review; no current check receipts');
   const result = await review({ cwd, choices, config, settings,
-    prompt: reviewPrompt({ diff, skills, previous: narrow ? previous.findings : null, fixDiff, declines: effectiveDeclines, binaryFiles }),
+    prompt: reviewPrompt({ diff, skills, previous: narrow ? previous.findings : null, fixDiff, declines: effectiveDeclines, binaryFiles, receipts: { head, mode, passed: stepNames }, description: currentPr.body }),
     model: options.reviewerModel, effort: options.reviewerEffort, env });
   await cleanHead({ cwd, head });
   if ((await pullRequest({ cwd })).headRefOid !== head) throw new VerifyError('HEAD_CHANGED', 'PR head changed during review');

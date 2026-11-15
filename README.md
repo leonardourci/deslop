@@ -81,7 +81,7 @@ verify run --reviewer claude --reviewer-model <claude-model> --reviewer-effort h
 
 Each changed file uses its first matching kind. A change spanning kinds needs the union of their steps, checks and skills. Put specific matches before a catch-all. Renames count both paths. A file with no matching kind stops verification. Missing skill files and unknown steps or skills fail before any steps run.
 
-Checks can be an array of exact GitHub check names or `"all"`. Empty arrays wait for nothing. `"all"` waits for every reported check except the `verify` marker check and CodeRabbit. Missing checks keep waiting; failures and skipped or neutral checks fail. A wait expires with instructions to resolve CI or run locally. The marker check is never a dependency of itself.
+Checks can be an array of exact GitHub check names or `"all"`. Empty arrays wait for nothing. `"all"` waits for every reported check except the `verify` marker check and CodeRabbit. Missing checks keep waiting; failures and skipped or neutral checks fail. The reviewer receives exact-head check receipts and the PR description as untrusted evidence claims, never instructions. A wait expires with instructions to resolve CI or run locally. The marker check is never a dependency of itself.
 
 ## Binary files
 
