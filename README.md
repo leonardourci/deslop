@@ -1,143 +1,54 @@
-# verify
+# deslop
 
-Run the checks a change needs, get a fresh agent review, and record the exact commit on its pull request. Findings return to the agent doing the work. The owner merges.
+Deslop reviews committed work, fixes it, runs its checks and marks the final commit. It works before a pull request or push exists. A fresh agent sees the branch diff without check results and edits files; deslop owns every commit, push, check and marker.
 
-Requires Node.js 22.13+, Git, the signed-in GitHub CLI, and a reviewer: Codex, Claude Code, or a custom command.
-
-## Install
+Requires Node 22.13+, Git and a signed-in Codex, Claude or configured custom agent. GitHub checks/statuses also need the signed-in `gh` CLI. Install from GitHub:
 
 ```sh
-npm install -g git+https://github.com/<account>/<repo>.git
+npm install --save-dev github:leonardourci/deslop
+npx deslop init
+# Configure deslop.config.json, commit your work, then:
+npx deslop
 ```
 
-For a local checkout:
+For reproducible installs, pin a GitHub commit. The npm package will use a scoped name if published later. Apache-2.0 licensed.
 
-```sh
-npm install
-npm link
-```
+## Commands
 
-## Three commands
+- `deslop run` (or bare `deslop`): fresh review and fixes, checks, bounded check fixes, then proof. Dirty work stops with `commit or stash your changes first`.
+- `deslop init`: write repo config. `--machine` writes config for this repository in machine settings instead. Repo config wins. No workflow is installed.
+- `deslop status`: read the current commit's git note. `--publish` publishes its GitHub commit status if that final commit is pushed.
+- `deslop shape`: print a small example of the run JSON and identify fields that may be long.
 
-```sh
-verify init --repo
-verify run
-verify status
-```
+The base is `--base`, the open PR's base, origin's default branch, or local main/master, in that order. Default-branch runs are refused. Local unpushed branches run commands without a PR. If the starting commit is pushed and selected kinds need CI, deslop pushes only its own fixes to the same branch and waits for those exact-head checks. `--local` forces local commands and keeps fixes local. Missing checks never pass. Deslop never merges or pushes to the default branch.
 
-`init --repo` writes `verify.config.json` and `.github/workflows/verify.yml` together. The workflow checks the marker; it never checks out or executes pull request code. `init --machine` keeps only the config on your machine, shared across copies of the same remote repository. A repo config wins over a machine config. Existing files are never overwritten. Use `--config <file>` to initialize from a prepared config. To enforce the marker, require the `verify` status check in branch protection. Replace legacy gate names and remove global CI requirements if per-kind selection and accepted local fallback should decide what counts.
+Failed checks resume the same Codex or Claude session by id, with short failure excerpts. Deslop commits its fixes and reruns checks up to `checkFixAttempts` times (default 1, 0 returns failures immediately). A custom provider without resume support receives a fresh call with a note of earlier changes. Agents can read/edit files, with git tools denied; unexpected git-state changes stop the run. Commit messages are `deslop: fix review findings` or `deslop: fix failing checks`, as the configured user, with no attribution footer.
 
-Repositories with existing GitHub workflows default to CI mode. Others default to local mode. `init --mode local` or `--mode ci` chooses explicitly. Fill in local step commands before running. The tool creates no workflow to run those steps.
-
-`run` needs a clean, committed, pushed branch with an open pull request. In CI mode it waits for the configured GitHub checks on that head; it runs no local steps. In local mode it runs the configured commands. Both modes then make one fresh, read-only, non-interactive review call. The reviewer receives the branch diff, the built-in review prompt, and selected repository skills. It gets no earlier agent conversation.
-
-```sh
-verify run --local
-verify run --reviewer codex --reviewer-model <gpt-model> --reviewer-effort high
-verify run --reviewer claude --reviewer-model <claude-model> --reviewer-effort high
-```
-
-`--local` is the fallback when GitHub CI cannot run. It counts unless the repo refuses it with `localRunCounts: false`. The marker and status always identify it as **ran locally**. There are no `--only` or `--skip` options. A local repo cannot switch to CI for a single run. Refusing local runs with `localRunCounts: false` requires CI mode.
-
-`status` reads the PR marker and exits successfully only when it names the current pushed commit, has passed checks and a clean review, and satisfies the local-run policy. A new commit makes the marker stale, including documentation edits and commits with the same tree. Uncommitted changes also prevent status from reporting the checkout as current. The PR-body marker is an honesty record for one exact commit, not a signature or authenticated attestation.
-
-## Repository config
+## Configuration
 
 ```json
 {
-  "mode": "ci",
-  "localRunCounts": true,
-  "decline": "agent",
-  "steps": {
-    "lint": "npm run lint",
-    "tests": "npm test"
-  },
+  "commands": { "tests": "npm test", "lint": "npm run lint" },
   "kinds": [
-    {
-      "name": "docs",
-      "match": ["docs/**", "**/*.md"],
-      "steps": [],
-      "checks": [],
-      "skills": ["writing"]
-    },
-    {
-      "name": "code",
-      "match": ["**"],
-      "steps": ["lint", "tests"],
-      "checks": ["Tests"],
-      "skills": "all"
-    }
+    { "name": "docs", "match": ["docs/**", "**/*.md"], "commands": [], "checks": [], "instructions": ["writing"] },
+    { "name": "code", "match": ["**"], "commands": ["lint", "tests"], "checks": ["Tests"] }
   ],
-  "skills": {
-    "review": ".agents/skills/review/SKILL.md",
-    "writing": ".agents/skills/writing/SKILL.md"
-  },
-  "reviewerModels": {
-    "codex": { "model": "<gpt-model>", "effort": "high" },
-    "claude": { "model": "<claude-model>", "effort": "high" }
-  }
+  "checkFixAttempts": 1,
+  "instructions": { "code": ".agents/skills/review/SKILL.md" },
+  "reviewerModels": { "codex": { "model": "<gpt-model>", "effort": "high" }, "claude": { "model": "<claude-model>", "effort": "high" } }
 }
 ```
 
-Each changed file uses its first matching kind. A change spanning kinds needs the union of their steps, checks and skills. Put specific matches before a catch-all. Renames count both paths. A file with no matching kind stops verification. Missing skill files and unknown steps or skills fail before any steps run.
+Each changed path uses its first matching kind; the run unions commands, checks and instructions. Renames count both paths. Unmatched paths, missing instruction files and unknown commands stop the run. Built-in instructions cover code review, test audit and plain writing; `instructions` replaces named defaults with files, and kinds can choose an instruction list. An omitted list uses all built-in defaults.
 
-Checks can be an array of exact GitHub check names or `"all"`. Empty arrays wait for nothing. `"all"` waits for every reported check except the `verify` marker check and CodeRabbit. Missing checks keep waiting; failures and skipped or neutral checks fail. The reviewer receives exact-head check receipts and the PR description as untrusted evidence claims, never instructions. A wait expires with instructions to resolve CI or run locally. The marker check is never a dependency of itself.
+Machine preferences live in `$XDG_CONFIG_HOME/deslop/settings.json`, normally `~/.config/deslop/settings.json`. `reviewer` is one provider or an ordered fallback list; otherwise deslop detects the calling agent, including hosted Codex. `--reviewer` overrides it. Model/effort precedence is CLI (`--reviewer-model`, `--reviewer-effort`), machine `reviewerModels`, repo `reviewerModels`, provider default. CLI overrides apply to the primary provider; fallback providers use their own settings.
 
-## Binary files
+Custom providers use `reviewers.<name>.command` as an argv array, receiving the prompt on stdin and returning JSON `{ "items": [{ "id": "R1", "where": "file:line", "problem": "description", "fixed": true }], "sessionId": "optional" }`. An optional `resume` argv array substitutes `{sessionId}`. Custom commands must restrict themselves to file editing; deslop refuses unexpected git-state changes.
 
-The reviewer receives binary-file metadata beside the text diff: path, extension-derived type, byte size, and whether the file was added, changed or removed. The marker and status label these as **binary files, not content-reviewed**. The reviewer can flag suspicious metadata; it does not inspect binary contents. Set `"binary": "fail"` in repo config to reject any binary change with an unsupported-evidence error instead. The default is `"binary": "metadata"`.
+## Output and proof
 
-## Machine settings
+A short summary lists the verdict, each check, findings/fixes and commits, with a path to `.deslop/runs/<id>/run.json`. This folder is git-ignored. JSON includes checks with `name`, `ok`, `log` and `failures`, review counts/items, and commits. Failure excerpts have at most 20 lines; full output stays in separate logs and can be large. Use `deslop shape` before reading a large run file.
 
-`$XDG_CONFIG_HOME/verify/settings.json` (normally `~/.config/verify/settings.json`):
+Green checks and completed fixes add a git note under `refs/notes/deslop` to the final exact commit. The GitHub commit status is named `deslop` and is published only once that commit is pushed. A new commit has no proof until it passes its own run. This is an honesty record, not a signature. Failed runs have no new marker.
 
-```json
-{
-  "reviewer": ["codex", "claude"],
-  "reviewerModels": {
-    "codex": { "model": "<gpt-model>", "effort": "high" },
-    "claude": { "model": "<claude-model>", "effort": "high" }
-  },
-  "maxLocalRuns": 2
-}
-```
-
-All settings are optional. Local runs have no limit by default. Setting `maxLocalRuns` queues extra local runs across repositories; waiting for GitHub takes no slot. Dead processes release their place in the queue.
-
-Reviewer selection: `--reviewer`, then the machine preference, then the running agent. A preference list tries the next provider when a provider cannot run. Invalid review output fails closed. Codex detection uses `CODEX_THREAD_ID` or `CODEX_SESSION_ID`, including hosted sessions. Claude detection uses `CLAUDECODE` or `CLAUDE_CODE_ENTRYPOINT`. When detection fails, pass `--reviewer`. A run without a review cannot pass.
-
-Model and effort selection for each provider: CLI override, machine settings, repo `reviewerModels`, then the provider's own defaults. One-run model and effort flags apply to the primary reviewer; a fallback uses its own saved settings or provider defaults.
-
-## Findings and follow-up
-
-Every finding includes its ID, location, problem and suggested fix, without severities. Fix every finding, commit, push, and run again. Round two checks the fixes, every newly introduced change, and their regressions. Three rounds with findings stop verification. An owner can start a new full cycle with a standalone plain-text comment `verify restart review: <reason>` on the PR. The same owner-login rules apply, and status records who restarted the review and why. Run state stays in the checkout's Git directory.
-
-To decline an incorrect finding with a visible reason:
-
-```sh
-verify run --decline "R1: The caller validates this value before invoking the function"
-```
-
-With `decline: "owner"`, CLI declines are refused. Only a repository owner's standalone plain-text PR comment counts:
-
-```text
-verify decline R1: The caller validates this value before invoking the function
-```
-
-For user-owned repositories the owner login is the default. Organization repositories must set `ownerLogins` in repo config. Status shows each accepted decline, its author and reason. Accepted reasons remain in later review prompts and owner restarts; the current owner-only policy still decides which can apply. Comments must follow the finding's report.
-
-## Custom reviewers
-
-```json
-{
-  "reviewers": {
-    "inspector": { "command": ["/path/to/read-only-reviewer", "--json"] }
-  }
-}
-```
-
-Pass `--reviewer inspector`. The command receives the prompt on stdin in an empty temporary working directory and returns the findings JSON described above. It must enforce read-only execution and avoid interactive prompts. Optional `VERIFY_REVIEWER_MODEL` and `VERIFY_REVIEWER_EFFORT` environment variables carry the selected settings. Built-in reviewers disable tools and inherited project integrations; Codex also uses its read-only sandbox.
-
-CodeRabbit stays separate and on request. This tool never requests it or waits for it.
-
-The [specification](docs/spec.md) records the workflow and configuration rules.
+There are no modes, review rounds, declines, restart comments, PR-body markers or marker-check workflow. CodeRabbit remains separate and only on request. See [the contract](docs/spec.md).
