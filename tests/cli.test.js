@@ -23,6 +23,9 @@ test('local run reviews clean committed work, records evidence and makes every n
   assert.match(state.prompts[0], /full branch review/);
   assert.match(state.prompts[0], /work.txt/);
   assert.match(state.prompts[0], /Trusted check receipts/);
+  assert.match(state.prompts[0], /tests would catch breakage by reading the supplied tests and code/);
+  assert.match(state.prompts[0], /PR-reported probe results as context/);
+  assert.match(state.prompts[0], /Never require evidence this tool cannot produce/);
   assert.ok(state.prompts[0].includes(JSON.stringify({ head: state.pr.headRefOid, mode: 'local', passed: ['test'] })));
   assert.match(state.prompts[0], /BEGIN UNTRUSTED PR DESCRIPTION[\s\S]*A useful change\.[\s\S]*END UNTRUSTED PR DESCRIPTION/);
   assert.deepEqual(state.reviewEnvs, [{ model: 'run-model', effort: 'low' }]);
