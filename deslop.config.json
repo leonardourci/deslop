@@ -1,8 +1,36 @@
 {
-  "commands": { "tests": "npm test" },
+  "commands": {
+    "tests": "npm test"
+  },
   "kinds": [
-    { "name": "docs", "match": ["docs/**", "README.md"], "commands": [], "checks": [], "instructions": ["writing"] },
-    { "name": "code", "match": ["**"], "commands": ["tests"], "checks": ["Tests (22.13.0)", "Tests (24)"] }
+    {
+      "name": "docs",
+      "match": [
+        "docs/**",
+        "README.md"
+      ],
+      "commands": [],
+      "checks": [],
+      "instructions": [
+        "writing"
+      ]
+    },
+    {
+      "name": "code",
+      "match": [
+        "**"
+      ],
+      "commands": [
+        "tests"
+      ],
+      "checks": [
+        "Tests (22.13.0)",
+        "Tests (24)"
+      ]
+    }
   ],
-  "checkFixAttempts": 1
+  "checkFixAttempts": 1,
+  "instructions": {
+    "code": ".agents/skills/review/SKILL.md"
+  }
 }
