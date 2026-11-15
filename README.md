@@ -52,3 +52,5 @@ A short summary lists the verdict, each check, findings/fixes and commits, with 
 Green checks and completed fixes add a git note under `refs/notes/deslop` to the final exact commit. The GitHub commit status is named `deslop` and is published only once that commit is pushed. A new commit has no proof until it passes its own run. This is an honesty record, not a signature. Failed runs have no new marker.
 
 There are no modes, review rounds, declines, restart comments, PR-body markers or marker-check workflow. CodeRabbit remains separate and only on request. See [the contract](docs/spec.md).
+
+A GitHub outage does not block local proof. Local runs skip the initial pending-status write. Passed checks keep their git note even if status publication fails; output says the proof is local and the status is not published yet. Retry `deslop status --publish` after a push or when GitHub recovers.

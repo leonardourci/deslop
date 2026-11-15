@@ -14,3 +14,5 @@ Configuration contains commands, change kinds with command/check/instruction sel
 Each run writes git-ignored `.deslop/runs/<id>/run.json`. It contains verdict, checks with name/ok/log/failures, review with found/fixed/items, and commits. Each failure has test, message and an excerpt of at most 20 lines; full output stays in separate log files. The short terminal summary lists checks, findings/fixes, commits, run.json, `deslop shape`, and warns that full logs can be large. Shape prints a small example and identifies fields that may be long.
 
 There are no review rounds, declines, owner restart comments, PR-body markers or marker-check workflows. CodeRabbit remains separate and only on request. Both implementation and migration PRs stay open for owner review and merge.
+
+A GitHub outage does not block local proof. Local runs skip the initial pending-status write. Passed checks keep their git note even if status publication fails; output says the proof is local and the status is not published yet. Retry `deslop status --publish` after a push or when GitHub recovers.
