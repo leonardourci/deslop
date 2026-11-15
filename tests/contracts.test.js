@@ -156,3 +156,37 @@ if(process.argv[2]==='repo')console.log(JSON.stringify({nameWithOwner:'example/p
   assert.match(r.stderr, /GitHub unreachable; rerun with --local/);
   assert.match(r.stderr, /HTTP 502/);
 });
+
+test('publication policy only accepts booleans and CI-required kinds need checks', (t) => {
+  const f = fixture(t);
+  assert.throws(
+    () =>
+      validateConfig({
+        root: f.root,
+        config: { ...f.config, publishLocal: 'yes' },
+      }),
+    /publishLocal must be boolean/,
+  );
+  assert.throws(
+    () =>
+      validateConfig({
+        root: f.root,
+        config: {
+          ...f.config,
+          kinds: [{ ...f.config.kinds[0], ciRequired: 'yes' }],
+        },
+      }),
+    /ciRequired must be boolean/,
+  );
+  assert.throws(
+    () =>
+      validateConfig({
+        root: f.root,
+        config: {
+          ...f.config,
+          kinds: [{ ...f.config.kinds[0], ciRequired: true, checks: [] }],
+        },
+      }),
+    /ciRequired needs CI checks/,
+  );
+});

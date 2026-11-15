@@ -46,6 +46,7 @@ export function validateConfig({ config, root }) {
     'checkFixAttempts',
     'reviewerModels',
     'reviewers',
+    'publishLocal',
   ];
   if (!object(config) || Object.keys(config).some((key) => !keys.includes(key)))
     fail('Config contains unsupported settings');
@@ -61,6 +62,11 @@ export function validateConfig({ config, root }) {
     (!Number.isInteger(config.checkFixAttempts) || config.checkFixAttempts < 0)
   )
     fail('checkFixAttempts must be a nonnegative integer');
+  if (
+    config.publishLocal !== undefined &&
+    typeof config.publishLocal !== 'boolean'
+  )
+    fail('publishLocal must be boolean');
   if (config.instructions !== undefined && !object(config.instructions))
     fail('instructions must map names to files');
   for (const [name, file] of Object.entries(config.instructions || {})) {
@@ -81,6 +87,10 @@ export function validateConfig({ config, root }) {
       !strings(kind.checks)
     )
       fail('Each kind needs a unique name, patterns, commands and checks');
+    if (kind.ciRequired !== undefined && typeof kind.ciRequired !== 'boolean')
+      fail(`ciRequired must be boolean in ${kind.name}`);
+    if (kind.ciRequired && !kind.checks.length)
+      fail(`ciRequired needs CI checks in ${kind.name}`);
     names.add(kind.name);
     if (kind.commands.some((name) => !Object.hasOwn(config.commands, name)))
       fail(`Unknown command in ${kind.name}`);
@@ -132,6 +142,11 @@ export function select({ config, paths }) {
     kinds: kinds.map((kind) => kind.name),
     commands: [...new Set(kinds.flatMap((kind) => kind.commands))],
     checks: [...new Set(kinds.flatMap((kind) => kind.checks))],
+    requiredChecks: [
+      ...new Set(
+        kinds.filter((kind) => kind.ciRequired).flatMap((kind) => kind.checks),
+      ),
+    ],
     instructions: [
       ...new Set(
         kinds.flatMap(
