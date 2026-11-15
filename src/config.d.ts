@@ -9,6 +9,7 @@ export interface Config {
   mode: 'local' | 'ci';
   localRunCounts?: boolean;
   decline?: 'agent' | 'owner';
+  binary?: 'metadata' | 'fail';
   ownerLogins?: string[];
   steps: Record<string, string>;
   skills: Record<string, string>;

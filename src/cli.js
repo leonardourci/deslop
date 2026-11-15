@@ -6,6 +6,7 @@ import { CONFIG_FILE, WORKFLOW_FILE, locations, loadConfig, loadSettings, readJs
 import { git, VerifyError } from './process.js';
 import { markerFromBody, markerWorkflow, pullRequest, validMarker } from './github.js';
 import { readState, run } from './run.js';
+import { BINARY_NOTE } from './binary.js';
 
 const HELP = `verify init (--repo | --machine) [--mode ci|local] [--config <file>]
 verify run [--local] [--reviewer <name>] [--reviewer-model <model>] [--reviewer-effort <effort>] [--decline "R1: reason"]
@@ -84,11 +85,13 @@ export async function status({ places }) {
   const current = !dirty && validMarker({ marker, head: pr.headRefOid, localRunCounts: config.localRunCounts !== false }) && head === pr.headRefOid;
   console.log(`marker: ${current ? 'current' : 'missing or stale'}, head ${pr.headRefOid}`);
   if (dirty) console.log('worktree: uncommitted changes');
+  if (marker?.binaryFiles?.length) console.log(`${BINARY_NOTE}: ${JSON.stringify(marker.binaryFiles)}`);
   if (marker) {
     console.log(`steps: ${marker.mode === 'local' ? 'ran locally' : 'ran in ci'}\nreview: ${JSON.stringify(marker.review)}\nfixed: ${JSON.stringify(marker.fixed || [])}\ndeclined: ${JSON.stringify(marker.declined || [])}\nrestarts: ${JSON.stringify(marker.restarts || [])}`);
   }
   if (!current) {
     const saved = Object.values(readState({ file: places.state })).filter(entry => entry.pr === pr.url).sort((left, right) => Date.parse(left.finishedAt) - Date.parse(right.finishedAt)).at(-1);
+    if (saved?.binaryFiles?.length) console.log(`${BINARY_NOTE}: ${JSON.stringify(saved.binaryFiles)}`);
     if (saved?.round >= 3 && saved.findings.length) console.log('review: stopped after three rounds\nhelp: An owner must comment: verify restart review: <reason>');
     if (saved) console.log(`last run head: ${saved.head}\nlast run: ${saved.mode === 'local' ? 'ran locally' : 'ran in ci'}\nreview: ${saved.reviewer}, round ${saved.round}\nfindings: ${JSON.stringify(saved.findings)}\ndeclined: ${JSON.stringify(saved.declines)}\nrestarts: ${JSON.stringify(saved.restarts || [])}`);
   }

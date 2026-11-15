@@ -65,6 +65,7 @@ export function validateConfig({ config, root }) {
     if (kind.skills !== 'all') for (const skill of kind.skills) requireConfig({ condition: Object.hasOwn(config.skills, skill), message: `${label}.skills: unknown skill ${skill}` });
   }
   if (config.ownerLogins !== undefined) requireConfig({ condition: stringList(config.ownerLogins) && config.ownerLogins.length > 0, message: 'ownerLogins must be a nonempty list of logins' });
+  requireConfig({ condition: config.binary === undefined || ['metadata', 'fail'].includes(config.binary), message: 'binary must be metadata or fail' });
   validateModels({ models: config.reviewerModels });
   if (config.reviewers !== undefined) {
     requireConfig({ condition: object(config.reviewers), message: 'reviewers must map names to custom commands' });
