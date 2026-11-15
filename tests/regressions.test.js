@@ -278,12 +278,15 @@ for (const path of ['deslop.config.json', 'instructions.md'])
 
 test('workflow changes in check repairs appear in the summary', (t) => {
   const f = fixture(t);
+  f.config.checkFixAttempts = 2;
+  f.configure();
   writeFileSync(join(f.root, 'work.txt'), 'bad');
   f.commit();
   const s = f.load();
   s.actions = [
     {},
-    { edit: 'good', files: { '.github/workflows/test.yml': 'workflow' } },
+    { edit: 'still bad', files: { '.github/workflows/test.yml': 'workflow' } },
+    { edit: 'good' },
   ];
   f.save(s);
   const r = f.call('run', '--reviewer', 'fixture');

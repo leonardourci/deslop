@@ -327,9 +327,12 @@ async function performRun({ places, options }) {
           (path) => resolve(cwd, path),
         ),
       );
-      data.workflowEdits = edited.filter((path) =>
-        path.startsWith('.github/workflows/'),
-      );
+      data.workflowEdits = [
+        ...new Set([
+          ...(data.workflowEdits || []),
+          ...edited.filter((path) => path.startsWith('.github/workflows/')),
+        ]),
+      ];
       if (
         edited.some(
           (path) =>
