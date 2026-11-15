@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { execute, DeslopError } from './process.js';
 import { EDITOR_CONTRACT } from './defaults.js';
+import { codexFilesystem, claudeEdits } from './scope.js';
 
 const ITEM_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   id: { type: 'string' }, where: { type: 'string' }, problem: { type: 'string' }, fixed: { type: 'boolean' },
@@ -39,7 +40,7 @@ export function parseReview({ value }) {
   }
   return value.items;
 }
-export async function review({ cwd, common, choices, config, settings, prompt, session, model, effort, env = process.env }) {
+export async function review({ cwd, common, choices, config, settings, prompt, session, model, effort, scope = { instructionFiles: [], protectedInstructions: [], excluded: [], normalDirectories: [], configured: [] }, env = process.env }) {
   const providers = session ? [session.provider] : choices;
   const errors = [];
   for (const provider of providers) {
@@ -55,7 +56,8 @@ export async function review({ cwd, common, choices, config, settings, prompt, s
         writeFileSync(schema, JSON.stringify(REVIEW_SCHEMA));
         const args = ['exec'];
         if (sessionId) args.push('resume');
-        args.push('--ignore-user-config', '--ignore-rules', '--json', '--output-schema', schema, '--output-last-message', output, '-c', 'approval_policy="never"', '-c', 'sandbox_mode="workspace-write"', '-c', 'features.shell_tool=false');
+        const filesystem = Object.entries(codexFilesystem({ cwd, common, scope })).map(([path, access]) => `${JSON.stringify(path)}=${JSON.stringify(access)}`).join(',');
+        args.push('--ignore-user-config', '--ignore-rules', '--json', '--output-schema', schema, '--output-last-message', output, '-c', 'approval_policy="never"', '-c', 'default_permissions="deslop"', '-c', 'permissions.deslop.extends=":workspace"', '-c', 'permissions.deslop.network.enabled=false', '-c', `permissions.deslop.filesystem={${filesystem}}`, '-c', 'features.shell_tool=false');
         if (choice.model) args.push('--model', choice.model);
         if (choice.effort) args.push('-c', `model_reasoning_effort=${JSON.stringify(choice.effort)}`);
         if (sessionId) args.push(sessionId);
@@ -68,8 +70,8 @@ export async function review({ cwd, common, choices, config, settings, prompt, s
         if (!sessionId) throw new DeslopError('REVIEW_OUTPUT', 'Codex did not return its session id');
       } else if (provider === 'claude') {
         const id = sessionId || randomUUID();
-        const deny = ['Bash', 'Write(**/.git)', 'Edit(**/.git)', 'Write(**/.git/**)', 'Edit(**/.git/**)', `Write(${common}/**)`, `Edit(${common}/**)`];
-        const args = ['--print', '--safe-mode', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--tools', 'Read,Glob,Grep,Edit,Write', '--allowedTools', 'Read,Glob,Grep,Edit,Write', '--permission-mode', 'acceptEdits', '--settings', JSON.stringify({ permissions: { deny } }), '--output-format', 'json', '--json-schema', JSON.stringify(REVIEW_SCHEMA), sessionId ? '--resume' : '--session-id', id];
+        const { allow, deny } = claudeEdits({ cwd, common, scope });
+        const args = ['--print', '--safe-mode', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--tools', 'Read,Glob,Grep,Edit,Write', '--allowedTools', ['Read', 'Glob', 'Grep', ...allow].join(','), '--permission-mode', 'dontAsk', '--settings', JSON.stringify({ permissions: { allow, deny } }), '--output-format', 'json', '--json-schema', JSON.stringify(REVIEW_SCHEMA), sessionId ? '--resume' : '--session-id', id];
         if (choice.model) args.push('--model', choice.model);
         if (choice.effort) args.push('--effort', choice.effort);
         const envelope = JSON.parse(await execute({ cwd, command: 'claude', args, input: prompt, env: clean }));

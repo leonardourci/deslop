@@ -7,7 +7,7 @@ import { git, DeslopError } from './process.js';
 import { run } from './run.js';
 import { commitStatus } from './github.js';
 
-export const SHAPE = { verdict: 'passed|failed', head: 'commit', checks: [{ name: 'tests', ok: false, log: '.deslop/runs/id/checks-0-0.log', failures: [{ test: 'test name', message: 'short failure', excerpt: 'at most 20 lines' }] }], review: { found: 1, fixed: 1, items: [{ id: 'R1', where: 'file:line', problem: 'one line', fixed: true }] }, commits: ['commit'] };
+export const SHAPE = { verdict: 'passed|failed', head: 'commit', checks: [{ name: 'tests', ok: false, log: '.deslop/runs/id/checks-0-0.log', failures: [{ test: 'test name', message: 'short failure', excerpt: 'at most 20 lines' }] }], review: { found: 1, fixed: 1, items: [{ id: 'R1', where: 'file:line', problem: 'one line', fixed: true }] }, commits: ['commit'], newFiles: ['new.test.js'] };
 async function init({ places, options }) {
   const target = options.machine ? places.machineConfig : join(places.root, CONFIG_FILE);
   if (existsSync(target)) throw new DeslopError('CONFIG', 'Config already exists');
@@ -52,7 +52,7 @@ export async function main({ argv = process.argv.slice(2), cwd = process.cwd() }
     else throw new DeslopError('USAGE', `Unknown or incomplete option: ${flag}`);
   }
   if (options.help) { console.log('deslop [run] [--local] [--base ref] [--reviewer provider] [--reviewer-model name] [--reviewer-effort effort]\ndeslop init [--machine] [--config file]\ndeslop status [--publish]\ndeslop shape'); return; }
-  if (command === 'shape') { console.log(JSON.stringify(SHAPE, null, 2)); console.log('Potentially long: checks[], checks[].failures[], review.items[], commits[]. Excerpts <=20 lines. Full logs can be large.'); return; }
+  if (command === 'shape') { console.log(JSON.stringify(SHAPE, null, 2)); console.log('Potentially long: checks[], checks[].failures[], review.items[], commits[], newFiles[]. Excerpts <=20 lines. Full logs can be large.'); return; }
   const places = await locations({ cwd });
   if (command === 'init') return await init({ places, options });
   if (command === 'status') return await status({ places, options });
