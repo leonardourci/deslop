@@ -12,7 +12,7 @@ export async function cleanTree({ cwd }) {
   if (await git({ cwd, args: ['status', '--porcelain', '--untracked-files=all'] })) throw new DeslopError('DIRTY', 'commit or stash your changes first');
 }
 async function gitState({ cwd }) {
-  const commands = [['rev-parse', 'HEAD'], ['symbolic-ref', 'HEAD'], ['for-each-ref', '--format=%(refname) %(objectname)'], ['ls-files', '--stage'], ['config', '--local', '--list']];
+  const commands = [['rev-parse', 'HEAD'], ['symbolic-ref', 'HEAD'], ['ls-files', '--stage'], ['config', '--local', '--list']];
   const values = await Promise.all(commands.map(args => git({ cwd, args })));
   const hooks = resolve(cwd, await git({ cwd, args: ['rev-parse', '--git-path', 'hooks'] }));
   if (existsSync(hooks)) for (const name of readdirSync(hooks).sort()) {

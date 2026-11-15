@@ -255,3 +255,21 @@ test('a GitHub publication outage cannot block local proof and status can retry 
   passed(f.call('status', '--publish'));
   assert.ok(f.load().github.some(args => args.includes('state=success')));
 });
+
+test('another worktree committing during checks does not invalidate this checkout', t => {
+  const f = fixture(t), peer = join(f.home, 'peer'), helper = join(f.home, 'peer-commit.cjs');
+  f.git('worktree', 'add', '-b', 'peer', peer, 'main');
+  writeFileSync(helper, `const fs=require('node:fs'),cp=require('node:child_process');const cwd=${JSON.stringify(peer)};fs.writeFileSync(require('node:path').join(cwd,'peer.txt'),'other worker');cp.execFileSync('git',['add','peer.txt'],{cwd});cp.execFileSync('git',['commit','-m','other worker commit'],{cwd});`);
+  f.config.commands.tests = `node ${JSON.stringify(helper)}`; f.configure(); f.commit();
+  const head = f.git('rev-parse', 'HEAD');
+  passed(f.call('run', '--reviewer', 'fixture'));
+  assert.equal(f.git('rev-parse', 'HEAD'), head);
+  assert.equal(f.git('log', 'peer', '-1', '--format=%s'), 'other worker commit');
+  assert.deepEqual(f.runs()[0].commits, []); passed(f.call('status'));
+});
+
+test('checks changing this checkout index are refused without proof', t => {
+  const f = fixture(t); f.config.commands.tests = 'git rm --cached work.txt'; f.configure(); f.commit();
+  failed(f.call('run', '--reviewer', 'fixture'), 'CHECK_GIT');
+  assert.equal(f.runs()[0].verdict, 'failed'); assert.equal(f.call('status').status, 1);
+});
