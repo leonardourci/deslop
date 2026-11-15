@@ -83,6 +83,13 @@ async function agentEdits({
     );
   if (failure) throw failure;
   if (turn === 0) await assertInstructionScope({ cwd: places.root, scope });
+  const edited = await dirtyPaths({ cwd: places.root });
+  data.workflowEdits = [
+    ...new Set([
+      ...(data.workflowEdits || []),
+      ...edited.filter((path) => path.startsWith('.github/workflows/')),
+    ]),
+  ];
   writeFileSync(
     join(dir, `review-${turn}.json`),
     JSON.stringify(result, null, 2),
@@ -272,6 +279,7 @@ async function performRun({ places, options }) {
           beforeCommand: assertCheckState,
           afterCommand: async ({ command }) => {
             await assertCheckState();
+            for (const path of await dirtyPaths({ cwd })) requiredPaths.add(path);
             if (await commitEdits({ cwd, message: `deslop: ${command}`, data }))
               editedCommands.push(command);
             expectedState = await gitState({ cwd });
@@ -291,6 +299,13 @@ async function performRun({ places, options }) {
           ...new Set([...(data.unstableCommands || []), ...editedCommands]),
         ];
       }
+      const expandedSelection = select({ config, paths: [...requiredPaths] });
+      if (
+        ['commands', 'checks', 'requiredChecks'].some((key) =>
+          expandedSelection[key].some((name) => !currentSelection[key].includes(name)),
+        )
+      )
+        continue;
       if (
         !ci &&
         checks.every((check) => check.ok) &&
@@ -367,12 +382,6 @@ async function performRun({ places, options }) {
           (path) => resolve(cwd, path),
         ),
       );
-      data.workflowEdits = [
-        ...new Set([
-          ...(data.workflowEdits || []),
-          ...edited.filter((path) => path.startsWith('.github/workflows/')),
-        ]),
-      ];
       if (
         edited.some(
           (path) =>

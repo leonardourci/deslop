@@ -157,6 +157,32 @@ if(process.argv[2]==='repo')console.log(JSON.stringify({nameWithOwner:'example/p
   assert.match(r.stderr, /HTTP 502/);
 });
 
+for (const persistent of [false, true])
+  test(`repository lookup ${persistent ? 'outages end with a local hint' : 'failures are retried'} during CI waiting`, (t) => {
+    const f = fixture(t);
+    writeFileSync(
+      join(f.bin, 'gh'),
+      `#!/usr/bin/env node
+const fs=require('node:fs'), marker=process.env.DESLOP_TEST_STATE+'.repo-retried';
+if(process.argv[2]==='repo') {
+  if(${persistent}||!fs.existsSync(marker)){fs.writeFileSync(marker,'1');console.error('HTTP 502: repository unavailable');process.exit(1)}
+  console.log(JSON.stringify({nameWithOwner:'example/project'}));
+} else if(process.argv.some(arg=>arg.includes('/check-runs?'))) console.log(JSON.stringify([{check_runs:[{id:1,name:'Tests',status:'completed',conclusion:'success'}]}]));
+else console.log('[[]]');
+`,
+      { mode: 0o755 },
+    );
+    const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)}; console.log(JSON.stringify(await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],timeoutMs:2000,pollMs:1})));`;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: f.root,
+      env: f.env,
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, persistent ? 1 : 0, result.stderr);
+    if (persistent) assert.match(result.stderr, /GitHub unreachable; rerun with --local/);
+    else assert.match(result.stdout, /success/);
+  });
+
 test('publication policy only accepts booleans and CI-required kinds need checks', (t) => {
   const f = fixture(t);
   assert.throws(

@@ -319,6 +319,17 @@ test('workflow changes in check repairs appear in the summary', (t) => {
   assert.match(r.stdout, /workflows: .github\/workflows\/test.yml/);
 });
 
+test('workflow changes in the initial review appear in the summary and run record', (t) => {
+  const f = fixture(t);
+  const s = f.load();
+  s.actions = [{ files: { '.github/workflows/test.yml': 'workflow' } }];
+  f.save(s);
+  const result = f.call('run', '--reviewer', 'fixture');
+  pass(result);
+  assert.match(result.stdout, /workflows: .github\/workflows\/test.yml/);
+  assert.deepEqual(f.runs()[0].workflowEdits, ['.github/workflows/test.yml']);
+});
+
 test('large changed files are listed with bounded additional contents', (t) => {
   const f = fixture(t);
   writeFileSync(join(f.root, 'large.txt'), 'x'.repeat(40000));

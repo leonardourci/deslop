@@ -6,6 +6,27 @@ import { fixture } from './fixtures.js';
 
 const passed = (r) => assert.equal(r.status, 0, r.stdout + r.stderr);
 
+test('command-generated files add their required checks before proof', (t) => {
+  const f = fixture(t);
+  f.config.commands = {
+    generate: `node -e "require('node:fs').writeFileSync('generated.js','generated')"`,
+    generated: 'node -e "process.exit(1)"',
+  };
+  f.config.kinds = [
+    { name: 'generated', match: ['generated.js'], commands: ['generated'], checks: [] },
+    { name: 'other', match: ['**'], commands: ['generate'], checks: [] },
+  ];
+  f.config.checkFixAttempts = 0;
+  f.configure();
+  f.commit();
+  const result = f.call('run', '--reviewer', 'fixture');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  const data = f.runs()[0];
+  assert.ok(data.checks.some((check) => check.name === 'generated' && !check.ok));
+  assert.equal(f.call('status').status, 1);
+  assert.equal(f.load().calls.length, 1);
+});
+
 test('lint:fix and generation edits land in separate command-named commits', (t) => {
   const f = fixture(t);
   writeFileSync(

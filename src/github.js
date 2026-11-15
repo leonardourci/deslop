@@ -126,13 +126,14 @@ export async function waitForChecks({
   pollMs = CI_POLL_MS,
   missingMs = CI_MISSING_MS,
 }) {
-  const repo = await repository({ cwd });
   const started = Date.now();
   const deadline = started + timeoutMs;
   let checks = names.map((name) => ({ name, state: 'missing' }));
   let lastError;
+  let repo;
   while (Date.now() < deadline) {
     try {
+      repo ||= await repository({ cwd });
       checks = await readChecks({ cwd, head, names, repo });
       lastError = null;
       if (
