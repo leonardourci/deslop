@@ -56,14 +56,17 @@ async function performRun({ places, options, env }) {
   const signature = createHash('sha256').update(JSON.stringify({ config, skills, base: pr.baseRefOid })).digest('hex');
   const allState = readState({ file: places.state });
   const key = pr.url;
-  let previous = allState[key];
+  const history = allState[key];
+  let previous = history;
   const restarts = [...(previous?.restarts || [])];
   if (previous?.findings?.length && previous.round >= MAX_ROUNDS) {
     restarts.push(await restartFor({ cwd, config, pr, previous }));
     previous = null;
   }
   if (previous?.head === head && previous.findings?.length && !options.decline?.length && config.decline !== 'owner') throw new VerifyError('FINDINGS', 'Fix the reported findings, commit and run again; or decline with visible reasons');
-  const declines = await declinesFor({ cwd, config, pr, previous: previous?.findings || [], arguments: options.decline });
+  const declines = await declinesFor({ cwd, config, pr, previous: history?.findings || [], arguments: options.decline });
+  const acceptedDeclines = [...(history?.declines || []), ...declines];
+  const effectiveDeclines = acceptedDeclines.filter(decline => config.decline !== 'owner' || typeof decline.url === 'string');
   const round = previous?.findings?.length ? previous.round + 1 : 1;
   const diff = await git({ cwd, args: ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', base, head] });
   let fixDiff = '';
@@ -80,15 +83,15 @@ async function performRun({ places, options, env }) {
   } else stepNames = await waitForChecks({ cwd, head, names: selection.checks });
   await cleanHead({ cwd, head });
   const result = await review({ cwd, choices, config, settings,
-    prompt: reviewPrompt({ diff, skills, previous: narrow ? previous.findings : null, fixDiff, declines: [...(previous?.declines || []), ...declines], binaryFiles }),
+    prompt: reviewPrompt({ diff, skills, previous: narrow ? previous.findings : null, fixDiff, declines: effectiveDeclines, binaryFiles }),
     model: options.reviewerModel, effort: options.reviewerEffort, env });
   await cleanHead({ cwd, head });
   if ((await pullRequest({ cwd })).headRefOid !== head) throw new VerifyError('HEAD_CHANGED', 'PR head changed during review');
   const reportedAt = new Date().toISOString();
-  const remaining = result.findings.filter(finding => !declines.some(decline => decline.finding === findingKey({ finding })));
+  const remaining = result.findings.filter(finding => !effectiveDeclines.some(decline => decline.finding === findingKey({ finding })));
   const state = { binaryFiles, signature, restarts, pr: pr.url, finishedAt: reportedAt, head, round, mode, steps: stepNames, reviewer: result.provider, model: result.choice,
-    findings: remaining.map(finding => ({ ...finding, reportedAt })), declines: [...(previous?.declines || []), ...declines],
-    fixed: [...(previous?.fixed || []), ...(previous?.findings?.filter(finding => !remaining.some(item => item.id === finding.id) && !declines.some(item => item.id === finding.id)).map(finding => finding.id) || [])] };
+    findings: remaining.map(finding => ({ ...finding, reportedAt })), declines: acceptedDeclines,
+    fixed: [...(history?.fixed || []), ...(history?.findings?.filter(finding => !remaining.some(item => item.id === finding.id) && !effectiveDeclines.some(item => item.finding === findingKey({ finding }))).map(finding => finding.id) || [])] };
   allState[key] = state;
   saveState({ file: places.state, state: allState });
   console.log(`review: ${result.provider}, round ${round}\nfindings: ${JSON.stringify(remaining)}`);

@@ -105,10 +105,17 @@ test('init writes both repo files, machine init writes only config, and existing
 test('visible agent declines are recorded; owner-only declines reject overrides and unauthorized comments', t => {
   const f = fixture(t);
   const finding = { id: 'R1', where: 'work.txt:1', problem: 'Intentional choice', fix: 'Change it' };
-  let state = f.load(); state.reviews = [{ findings: [finding] }, { findings: [] }]; f.save(state);
+  const second = { id: 'R2', where: 'work.txt:1', problem: 'Another issue', fix: 'Fix the second issue' };
+  let state = f.load(); state.reviews = [{ findings: [finding, second] }, { findings: [second] }, { findings: [] }]; f.save(state);
   failed(f.call('run', '--reviewer', 'fixture'), 'FINDINGS');
-  passed(f.call('run', '--reviewer', 'fixture', '--decline', 'R1: Required by the contract'));
+  failed(f.call('run', '--reviewer', 'fixture', '--decline', 'R1: Required by the contract'), 'FINDINGS');
   assert.match(f.call('status').stdout, /Required by the contract/);
+  writeFileSync(join(f.root, 'work.txt'), 'second issue fixed'); f.commit();
+  passed(f.call('run', '--reviewer', 'fixture'));
+  const followUp = f.load().prompts[2];
+  assert.match(followUp, /Required by the contract/);
+  assert.match(followUp, /"by":"agent"/);
+  assert.match(followUp, /Intentional choice/);
   f.config.decline = 'owner'; f.configure(); f.commit();
   state = f.load(); state.reviews = [{ findings: [finding] }]; f.save(state);
   failed(f.call('run', '--reviewer', 'fixture', '--decline', 'R1: agent says so'), 'DECLINE');
@@ -124,10 +131,11 @@ test('visible agent declines are recorded; owner-only declines reject overrides 
 test('three unresolved reviews stop and require owner intervention', t => {
   const f = fixture(t);
   const finding = { id: 'R1', where: 'work.txt:1', problem: 'Still broken', fix: 'Fix it' };
-  const state = f.load(); state.reviews = [{ findings: [finding] }, { findings: [finding] }, { findings: [finding] }]; f.save(state);
+  const exception = { id: 'R2', where: 'work.txt:1', problem: 'Accepted exception', fix: 'Change the contract' };
+  const state = f.load(); state.reviews = [{ findings: [finding, exception] }, { findings: [finding] }, { findings: [finding] }]; f.save(state);
   failed(f.call('run', '--reviewer', 'fixture'), 'FINDINGS');
   writeFileSync(join(f.root, 'work.txt'), 'attempt two'); f.commit();
-  failed(f.call('run', '--reviewer', 'fixture'), 'FINDINGS');
+  failed(f.call('run', '--reviewer', 'fixture', '--decline', 'R2: This exception is part of the accepted contract'), 'FINDINGS');
   writeFileSync(join(f.root, 'work.txt'), 'attempt three'); f.commit();
   failed(f.call('run', '--reviewer', 'fixture'), 'OWNER_REQUIRED');
   writeFileSync(join(f.root, 'work.txt'), 'attempt four'); f.commit();
@@ -140,6 +148,8 @@ test('three unresolved reviews stop and require owner intervention', t => {
   passed(f.call('run', '--reviewer', 'fixture'));
   assert.equal(f.load().prompts.length, 4);
   assert.match(f.load().prompts[3], /full branch review/);
+  assert.match(f.load().prompts[3], /This exception is part of the accepted contract/);
+  assert.match(f.call('status').stdout, /This exception is part of the accepted contract/);
   assert.match(f.call('status').stdout, /fixes are ready/);
 });
 
