@@ -19,7 +19,7 @@ export function fixture(t) {
   symlinkSync(process.execPath, join(bin, process.platform === 'win32' ? 'node.exe' : 'node'));
   const env = { ...process.env };
   for (const key of Object.keys(env)) {
-    if (/^(PNYX_|CODEX_|CLAUDE|GH_|GITHUB_|ANTHROPIC_|OPENAI_|AWS_|AZURE_|SSH_|GIT_CONFIG|GIT_AUTHOR|GIT_COMMITTER|GIT_SSH|GIT_ASKPASS)/.test(key)) delete env[key];
+    if (/^(PNYX_|CODEX_|CLAUDE|GH_|GITHUB_|ANTHROPIC_|OPENAI_|AWS_|AZURE_|SSH_|GIT_)/.test(key)) delete env[key];
   }
   Object.assign(env, { HOME: home, USERPROFILE: home, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
     XDG_CONFIG_HOME: join(home, 'config'), PATH: bin, VERIFY_TEST_STATE: join(home, 'github.json') });

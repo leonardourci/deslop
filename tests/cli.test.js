@@ -245,3 +245,21 @@ test('test commands isolate home, Git configuration and default provider executa
   assert.match(unavailable.stderr, /fixture provider unavailable/);
   assert.equal(f.call('status').status, 1);
 });
+
+test('poisoned Git routing cannot redirect fixture writes into another repository', t => {
+  const outside = fixture(t);
+  const before = outside.git('rev-parse', 'HEAD');
+  const poison = {
+    GIT_DIR: join(outside.root, '.git'), GIT_WORK_TREE: outside.root,
+    GIT_INDEX_FILE: join(outside.root, '.git', 'index'), GIT_OBJECT_DIRECTORY: join(outside.root, '.git', 'objects'),
+  };
+  const original = {};
+  for (const key of Object.keys(poison)) original[key] = process.env[key];
+  Object.assign(process.env, poison);
+  let isolated;
+  try { isolated = fixture(t); }
+  finally { for (const key of Object.keys(poison)) { if (original[key] === undefined) delete process.env[key]; else process.env[key] = original[key]; } }
+  assert.equal(isolated.git('rev-parse', '--show-toplevel'), isolated.root);
+  assert.equal(outside.git('rev-parse', 'HEAD'), before);
+  passed(isolated.call('run', '--reviewer', 'fixture'));
+});
