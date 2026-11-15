@@ -79,7 +79,7 @@ export async function review({ cwd, common, choices, config, settings, prompt, s
         const custom = config.reviewers?.[provider];
         if (!custom) throw new DeslopError('REVIEWER', `Configure reviewers.${provider}.command`);
         const argv = sessionId && custom.resume ? custom.resume.map(arg => arg.replaceAll('{sessionId}', sessionId)) : custom.command;
-        const note = session && !custom.resume ? `Fresh fallback call: prior edits were committed as ${session.commits?.join(', ') || 'none'}. ${EDITOR_CONTRACT}\n` : '';
+        const note = session && !(sessionId && custom.resume) ? `Fresh fallback call: prior edits were committed as ${session.commits?.join(', ') || 'none'}. ${EDITOR_CONTRACT}\n` : '';
         raw = await execute({ cwd, command: argv[0], args: argv.slice(1), input: note + prompt, env: clean });
       }
       let value;
@@ -88,7 +88,8 @@ export async function review({ cwd, common, choices, config, settings, prompt, s
       sessionId ||= value.sessionId;
       return { items, session: { provider, id: sessionId, choice } };
     } catch (error) {
-      if (error.code === 'REVIEW_OUTPUT' || session) throw error;
+      // A provider that started may have edited files before failing.
+      if (error.code !== 'ENOENT' || !error.syscall?.startsWith('spawn ') || session) throw error;
       errors.push(`${provider}: ${error.message}`);
     } finally { rmSync(scratch, { recursive: true, force: true }); }
   }

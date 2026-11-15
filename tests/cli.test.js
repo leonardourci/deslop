@@ -8,6 +8,15 @@ function passed(result) { assert.equal(result.status, 0, result.stdout + result.
 function failed(result, code) { assert.notEqual(result.status, 0, result.stdout); assert.match(result.stderr, new RegExp(`code: ${code}`)); }
 const finding = { id: 'R1', where: 'work.txt:1', problem: 'bad content', fixed: true };
 
+test('changed directory symlinks are reviewed without reading their targets', t => {
+  const f = fixture(t);
+  symlinkSync(f.home, join(f.root, 'linked-directory'));
+  f.commit();
+  passed(f.call('run', '--reviewer', 'fixture'));
+  assert.match(f.load().calls[0].prompt, /linked-directory: symlink or submodule; see branch diff/);
+  passed(f.call('status'));
+});
+
 test('commits review edits before checks and marks the final local commit without any PR', t => {
   const f = fixture(t); const s = f.load(); s.actions = [{ edit: 'good', items: [finding] }]; f.save(s);
   writeFileSync(join(f.root, 'work.txt'), 'bad'); f.commit(); const initial = f.git('rev-parse', 'HEAD');
