@@ -1,5 +1,6 @@
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { fixture } from '../tests/fixtures.js';
 
 if (!process.env.CODEX_THREAD_ID && !process.env.CODEX_SESSION_ID) throw new Error('Run this smoke check from a real hosted Codex session');
@@ -7,6 +8,10 @@ const cleanup = [];
 const context = { after: callback => cleanup.push(callback) };
 const test = fixture(context);
 try {
+  rmSync(join(test.home, 'bin', 'codex'));
+  test.env.PATH = `${join(test.home, 'bin')}:${process.env.PATH}`;
+  test.env.CODEX_HOME = process.env.CODEX_HOME || join(homedir(), '.codex');
+  if (process.env.OPENAI_API_KEY) test.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
   test.env.CODEX_THREAD_ID = process.env.CODEX_THREAD_ID;
   test.env.CODEX_SESSION_ID = process.env.CODEX_SESSION_ID;
   const base = test.load();

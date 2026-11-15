@@ -22,6 +22,9 @@ test('local run reviews clean committed work, records evidence and makes every n
   assert.match(state.prompts[0], /work.txt/);
   assert.deepEqual(state.reviewEnvs, [{ model: 'run-model', effort: 'low' }]);
   passed(f.call('status'));
+  writeFileSync(join(f.root, 'uncommitted.txt'), 'dirty');
+  assert.equal(f.call('status').status, 1);
+  rmSync(join(f.root, 'uncommitted.txt'));
   writeFileSync(join(f.root, 'README.md'), 'docs changed\n'); f.commit();
   assert.equal(f.call('status').status, 1);
   writeFileSync(join(f.root, 'dirty.txt'), 'dirty');
@@ -34,11 +37,15 @@ test('findings go back to the working agent, then a narrow review records fixed 
   const state = f.load(); state.reviews = [{ findings: [{ id: 'R1', where: 'work.txt:1', problem: 'Wrong content', fix: 'Use fixed content' }] }, { findings: [] }]; f.save(state);
   failed(f.call('run', '--reviewer', 'fixture'), 'FINDINGS');
   assert.doesNotMatch(f.load().pr.body, /verify:v1/);
-  writeFileSync(join(f.root, 'work.txt'), 'fixed content\n'); f.commit();
+  writeFileSync(join(f.root, 'work.txt'), 'fixed content\n');
+  writeFileSync(join(f.root, 'unrelated.js'), 'export const unrelatedDefect = () => undefined.value;\n');
+  f.commit();
   passed(f.call('run', '--reviewer', 'fixture'));
   const after = f.load();
   assert.match(after.prompts[1], /narrow follow-up/);
   assert.match(after.prompts[1], /fixed content/);
+  assert.match(after.prompts[1], /unrelatedDefect/);
+  assert.match(after.prompts[1], /every newly introduced change/);
   assert.match(after.pr.body, /"round":2/);
   assert.match(f.call('status').stdout, /fixed: \["R1"\]/);
 });
@@ -142,6 +149,14 @@ test('a rerun that fails checks clears previous proof on the same head', t => {
   let state = f.load(); state.checks = [{ id: 1, name: 'Tests', status: 'completed', conclusion: 'success' }]; f.save(state);
   passed(f.call('run', '--reviewer', 'fixture'));
   passed(f.call('status'));
+  f.config.kinds[0].steps = ['missing']; f.configure();
+  failed(f.call('run', '--reviewer', 'fixture'), 'CONFIG');
+  assert.doesNotMatch(f.load().pr.body, /verify:v1/);
+  f.config.kinds[0].steps = ['test']; f.configure();
+  passed(f.call('run', '--reviewer', 'fixture'));
+  failed(f.call('run'), 'REVIEWER');
+  assert.doesNotMatch(f.load().pr.body, /verify:v1/);
+  passed(f.call('run', '--reviewer', 'fixture'));
   state = f.load(); state.checks = [{ id: 2, name: 'Tests', status: 'completed', conclusion: 'failure' }]; f.save(state);
   failed(f.call('run', '--reviewer', 'fixture'), 'CI_FAILED');
   assert.equal(f.call('status').status, 1);
@@ -196,4 +211,37 @@ test('invalid JSON shape from the preferred reviewer cannot fall through to a cl
   failed(f.call('run'), 'REVIEW_OUTPUT');
   assert.equal(f.load().prompts.length, 1);
   assert.doesNotMatch(f.load().pr.body, /verify:v1/);
+});
+
+
+test('binary metadata is visible by default and strict repositories reject binary changes', t => {
+  const f = fixture(t);
+  writeFileSync(join(f.root, 'icon.bin'), Buffer.from([0, 1, 2, 3])); f.commit();
+  passed(f.call('run', '--reviewer', 'fixture'));
+  let marker = f.load().pr.body;
+  assert.match(marker, /binary files, not content-reviewed/);
+  assert.match(marker, /"path":"icon.bin","type":"bin","size":4,"change":"added"/);
+  assert.match(f.call('status').stdout, /binary files, not content-reviewed/);
+  assert.match(f.load().prompts[0], /icon.bin/);
+  const base = f.load(); base.pr.baseRefOid = f.git('rev-parse', 'HEAD'); f.save(base);
+  writeFileSync(join(f.root, 'icon.bin'), Buffer.from([0, 1, 2, 3, 4])); f.commit();
+  passed(f.call('run', '--reviewer', 'fixture'));
+  assert.match(f.load().pr.body, /"size":5,"change":"changed"/);
+  rmSync(join(f.root, 'icon.bin')); f.commit();
+  passed(f.call('run', '--reviewer', 'fixture'));
+  assert.match(f.load().pr.body, /"size":4,"change":"removed"/);
+  f.config.binary = 'fail'; f.configure(); f.commit();
+  failed(f.call('run', '--reviewer', 'fixture'), 'BINARY_EVIDENCE');
+  assert.doesNotMatch(f.load().pr.body, /verify:v1/);
+});
+
+
+test('test commands isolate home, Git configuration and default provider executables', t => {
+  const f = fixture(t);
+  passed(f.call('run', '--reviewer', 'fixture'));
+  assert.deepEqual(f.load().reviewContext, { isolatedHome: true, isolatedGit: true, authKeys: [] });
+  const unavailable = f.call('run', '--reviewer', 'claude');
+  failed(unavailable, 'REVIEW_UNAVAILABLE');
+  assert.match(unavailable.stderr, /fixture provider unavailable/);
+  assert.equal(f.call('status').status, 1);
 });

@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const cli = fileURLToPath(new URL('../src/cli.js', import.meta.url));
@@ -12,15 +12,25 @@ export function fixture(t) {
   const root = join(home, 'repo');
   const bin = join(home, 'bin');
   mkdirSync(root); mkdirSync(bin);
-  const env = { ...process.env, XDG_CONFIG_HOME: join(home, 'config'), PATH: `${bin}:${process.env.PATH}`, VERIFY_TEST_STATE: join(home, 'github.json') };
-  for (const key of Object.keys(env)) if (/^(PNYX_|CODEX_|CLAUDE)/.test(key)) delete env[key];
+  const gitName = process.platform === 'win32' ? 'git.exe' : 'git';
+  const gitExecutable = process.env.PATH.split(delimiter).map(directory => join(directory, gitName)).find(candidate => existsSync(candidate));
+  if (!gitExecutable) throw new Error('Git is required for the test fixtures');
+  symlinkSync(gitExecutable, join(bin, gitName));
+  symlinkSync(process.execPath, join(bin, process.platform === 'win32' ? 'node.exe' : 'node'));
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (/^(PNYX_|CODEX_|CLAUDE|GH_|GITHUB_|ANTHROPIC_|OPENAI_|AWS_|AZURE_|SSH_|GIT_CONFIG|GIT_AUTHOR|GIT_COMMITTER|GIT_SSH|GIT_ASKPASS)/.test(key)) delete env[key];
+  }
+  Object.assign(env, { HOME: home, USERPROFILE: home, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+    XDG_CONFIG_HOME: join(home, 'config'), PATH: bin, VERIFY_TEST_STATE: join(home, 'github.json') });
+  for (const provider of ['codex', 'claude']) writeFileSync(join(bin, provider), '#!/usr/bin/env node\nconsole.error("fixture provider unavailable"); process.exit(78);\n', { mode: 0o755 });
   function git(...args) { return execFileSync('git', args, { cwd: root, env, encoding: 'utf8' }).trim(); }
   git('init', '-b', 'main');
   git('config', 'user.name', 'Fixture'); git('config', 'user.email', 'fixture@example.invalid');
   writeFileSync(join(root, 'base.txt'), 'base\n'); git('add', '.'); git('commit', '-m', 'base');
   const base = git('rev-parse', 'HEAD'); git('switch', '-c', 'change');
   const external = join(home, 'reviewer.cjs');
-  writeFileSync(external, `const fs = require('node:fs'); const state = JSON.parse(fs.readFileSync(process.env.VERIFY_TEST_STATE)); let prompt='';process.stdin.on('data',chunk=>prompt+=chunk);process.stdin.on('end',()=>{state.prompts ||= [];state.prompts.push(prompt); state.reviewEnvs ||= []; state.reviewEnvs.push({model:process.env.VERIFY_REVIEWER_MODEL,effort:process.env.VERIFY_REVIEWER_EFFORT,worker:process.env.PNYX_ACTOR,thread:process.env.CODEX_THREAD_ID});const result=state.reviews.shift() || {findings:[]};fs.writeFileSync(process.env.VERIFY_TEST_STATE, JSON.stringify(state)); console.log(JSON.stringify(result));});`);
+  writeFileSync(external, `const fs = require('node:fs'); const state = JSON.parse(fs.readFileSync(process.env.VERIFY_TEST_STATE)); let prompt='';process.stdin.on('data',chunk=>prompt+=chunk);process.stdin.on('end',()=>{state.prompts ||= [];state.prompts.push(prompt); state.reviewContext={isolatedHome:process.env.HOME===require('node:path').dirname(process.env.VERIFY_TEST_STATE),isolatedGit:process.env.GIT_CONFIG_GLOBAL==='/dev/null',authKeys:Object.keys(process.env).filter(key=>/^(GH_TOKEN$|GITHUB_TOKEN$|ANTHROPIC_|OPENAI_|AWS_)/.test(key))}; state.reviewEnvs ||= []; state.reviewEnvs.push({model:process.env.VERIFY_REVIEWER_MODEL,effort:process.env.VERIFY_REVIEWER_EFFORT,worker:process.env.PNYX_ACTOR,thread:process.env.CODEX_THREAD_ID});const result=state.reviews.shift() || {findings:[]};fs.writeFileSync(process.env.VERIFY_TEST_STATE, JSON.stringify(state)); console.log(JSON.stringify(result));});`);
   const config = { mode: 'local', steps: { test: `${JSON.stringify(process.execPath)} -e "process.exit(0)"` },
     kinds: [{ name: 'code', match: ['**'], steps: ['test'], checks: ['Tests'], skills: [] }], skills: {}, reviewers: { fixture: { command: [process.execPath, external] } } };
   writeFileSync(join(bin, 'gh'), `#!/usr/bin/env node
