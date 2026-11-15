@@ -5,7 +5,6 @@ import { git, DeslopError } from './process.js';
 import { loadConfig, loadSettings, select, instructionsFor } from './config.js';
 import { branchInfo, remoteHead, pushFixes, commitStatus } from './github.js';
 import { reviewerChoices, reviewPrompt, review } from './review.js';
-import { exclusiveRun } from './local.js';
 import { runChecks } from './checks.js';
 import { EDITOR_CONTRACT } from './defaults.js';
 
@@ -44,6 +43,8 @@ async function agentEdits({ places, options, config, settings, choices, prompt, 
 }
 export async function run({ places, options }) {
   await cleanTree({ cwd: places.root });
+  // Node 22 emits a SQLite warning on import; dirty runs must print only the refusal.
+  const { exclusiveRun } = await import('./local.js');
   return await exclusiveRun({ file: places.lock, work: async () => await performRun({ places, options }) });
 }
 async function performRun({ places, options }) {
