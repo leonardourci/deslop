@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 
-export class VerifyError extends Error {
+export class DeslopError extends Error {
   constructor(code, message) {
     super(message);
     this.code = code;
@@ -17,7 +17,9 @@ export async function execute({ command, args = [], cwd, input, env = process.en
     child.on('error', reject);
     child.on('close', (status, signal) => {
       if (status !== 0) {
-        reject(new VerifyError('COMMAND', `${command} failed (${signal || status}): ${stderr.trim()}`));
+        const error = new DeslopError('COMMAND', `${command} failed (${signal || status}): ${stderr.trim()}`);
+        error.stdout = stdout; error.stderr = stderr; error.status = status;
+        reject(error);
         return;
       }
       resolve(stdout.trimEnd());

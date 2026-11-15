@@ -1,116 +1,58 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readdirSync, writeFileSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CONFIG_FILE, WORKFLOW_FILE, locations, loadConfig, loadSettings, readJson, validateConfig } from './config.js';
-import { git, VerifyError } from './process.js';
-import { markerFromBody, markerWorkflow, pullRequest, validMarker } from './github.js';
-import { readState, run } from './run.js';
-import { BINARY_NOTE } from './binary.js';
+import { CONFIG_FILE, locations, readJson, validateConfig } from './config.js';
+import { git, DeslopError } from './process.js';
+import { run } from './run.js';
+import { commitStatus } from './github.js';
 
-const HELP = `verify init (--repo | --machine) [--mode ci|local] [--config <file>]
-verify run [--local] [--reviewer <name>] [--reviewer-model <model>] [--reviewer-effort <effort>] [--decline "R1: reason"]
-verify status
-
-init writes a repo config with its marker workflow, or a machine-only config.
-run performs the selected checks and one fresh review; findings prevent a marker.
-status reads the exact commit marker on the pull request.`;
-
-export function parseArgs({ args }) {
-  const [command, ...rest] = args;
-  if (!command || command === '--help' || command === '-h') return { command: 'help', options: {} };
-  const allowed = {
-    init: { '--repo': false, '--machine': false, '--mode': true, '--config': true },
-    run: { '--local': false, '--reviewer': true, '--reviewer-model': true, '--reviewer-effort': true, '--decline': true },
-    status: {},
-  }[command];
-  if (!allowed) throw new VerifyError('USAGE', HELP);
+export const SHAPE = { verdict: 'passed|failed', head: 'commit', checks: [{ name: 'tests', ok: false, log: '.deslop/runs/id/checks-0-0.log', failures: [{ test: 'test name', message: 'short failure', excerpt: 'at most 20 lines' }] }], review: { found: 1, fixed: 1, items: [{ id: 'R1', where: 'file:line', problem: 'one line', fixed: true }] }, commits: ['commit'] };
+async function init({ places, options }) {
+  const target = options.machine ? places.machineConfig : join(places.root, CONFIG_FILE);
+  if (existsSync(target)) throw new DeslopError('CONFIG', 'Config already exists');
+  const config = options.config ? readJson({ path: options.config }) : { commands: { tests: "echo 'Configure commands.tests in deslop.config.json' >&2; exit 1" }, kinds: [{ name: 'docs', match: ['**/*.md'], commands: [], checks: [], instructions: ['writing'] }, { name: 'code', match: ['**'], commands: ['tests'], checks: ['Tests'] }], checkFixAttempts: 1 };
+  validateConfig({ config, root: places.root });
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, `${JSON.stringify(config, null, 2)}\n`, { flag: 'wx' });
+  console.log(`wrote: ${target}\nnext: configure commands and kinds, then commit before running deslop`);
+}
+async function status({ places, options }) {
+  const cwd = places.root, head = await git({ cwd, args: ['rev-parse', 'HEAD'] });
+  let marker;
+  try { marker = JSON.parse(await git({ cwd, args: ['notes', '--ref=deslop', 'show', head] })); } catch (error) { if (error.code !== 'COMMAND' && !(error instanceof SyntaxError)) throw error; }
+  const dirty = await git({ cwd, args: ['status', '--porcelain', '--untracked-files=all'] });
+  const valid = !dirty && marker?.version === 1 && marker.head === head && marker.verdict === 'passed' && Array.isArray(marker.checks) && marker.checks.every(check => check.ok === true) && marker.review && marker.review.found === marker.review.fixed;
+  if (!valid) { console.log(`marker: missing or stale, head ${head}`); process.exitCode = 1; return; }
+  console.log(`marker: current, head ${head}\ndetails: ${marker.run}\nshape: deslop shape\nlogs: checks[].log (full logs can be large)`);
+  if (options.publish) {
+    const branch = await git({ cwd, args: ['symbolic-ref', '--short', 'HEAD'] });
+    console.log(`published: ${await commitStatus({ cwd, head, branch, state: 'success', description: 'Review fixed and checks passed' })}`);
+  }
+}
+export async function main({ argv = process.argv.slice(2), cwd = process.cwd() } = {}) {
+  const args = [...argv];
+  const command = args[0] && !args[0].startsWith('-') ? args.shift() : 'run';
   const options = {};
-  for (let index = 0; index < rest.length; index++) {
-    const flag = rest[index];
-    if (!Object.hasOwn(allowed, flag)) throw new VerifyError('USAGE', `Unknown option ${flag}\n${HELP}`);
-    const key = flag.slice(2).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
-    let value = true;
-    if (allowed[flag]) {
-      value = rest[++index];
-      if (!value || value.startsWith('--')) throw new VerifyError('USAGE', `${flag} needs a value`);
-    }
-    if (key === 'decline') {
-      if (!options.decline) options.decline = [];
-      options.decline.push(value);
-    } else {
-      if (options[key] !== undefined) throw new VerifyError('USAGE', `Repeated option ${flag}`);
-      options[key] = value;
-    }
+  const booleans = ['local', 'machine', 'publish', 'help'];
+  const values = ['base', 'reviewer', 'reviewer-model', 'reviewer-effort', 'config'];
+  while (args.length) {
+    const flag = args.shift();
+    if (!flag?.startsWith('--')) throw new DeslopError('USAGE', 'Expected a named option');
+    const name = flag.slice(2), key = name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+    if (booleans.includes(name)) options[key] = true;
+    else if (values.includes(name) && args[0] && !args[0].startsWith('--')) options[key] = args.shift();
+    else throw new DeslopError('USAGE', `Unknown or incomplete option: ${flag}`);
   }
-  return { command, options };
+  if (options.help) { console.log('deslop [run] [--local] [--base ref] [--reviewer provider] [--reviewer-model name] [--reviewer-effort effort]\ndeslop init [--machine] [--config file]\ndeslop status [--publish]\ndeslop shape'); return; }
+  if (command === 'shape') { console.log(JSON.stringify(SHAPE, null, 2)); console.log('Potentially long: checks[], checks[].failures[], review.items[], commits[]. Excerpts <=20 lines. Full logs can be large.'); return; }
+  const places = await locations({ cwd });
+  if (command === 'init') return await init({ places, options });
+  if (command === 'status') return await status({ places, options });
+  if (command !== 'run') throw new DeslopError('USAGE', `Unknown command: ${command}`);
+  const result = await run({ places, options });
+  if (result.verdict !== 'passed') process.exitCode = 1;
 }
-
-export function init({ places, options }) {
-  loadSettings({ home: places.home });
-  if (Boolean(options.repo) === Boolean(options.machine)) throw new VerifyError('USAGE', 'Choose exactly one: --repo or --machine');
-  const workflowPath = join(places.root, WORKFLOW_FILE);
-  const configPath = options.repo ? join(places.root, CONFIG_FILE) : places.machineConfig;
-  if (existsSync(configPath) || options.repo && existsSync(workflowPath)) throw new VerifyError('CONFIG', 'Config or workflow already exists; edit it explicitly');
-  if (options.machine && existsSync(join(places.root, CONFIG_FILE))) throw new VerifyError('CONFIG', 'Repo config takes precedence; edit it instead');
-  const workflows = join(places.root, '.github', 'workflows');
-  const hasCI = existsSync(workflows) && readdirSync(workflows).some(file => /\.ya?ml$/.test(file));
-  const mode = options.mode || (hasCI ? 'ci' : 'local');
-  const config = options.config ? readJson({ path: options.config }) : {
-    mode, localRunCounts: true, decline: 'agent',
-    steps: { tests: "echo 'Configure the tests step in verify.config.json' >&2; exit 1" },
-    kinds: [
-      { name: 'docs', match: ['**/*.md'], steps: [], checks: [], skills: [] },
-      { name: 'code', match: ['**'], steps: ['tests'], checks: 'all', skills: [] },
-    ], skills: {},
-  };
-  if (options.mode) config.mode = options.mode;
-  validateConfig({ root: places.root, config });
-  mkdirSync(dirname(configPath), { recursive: true });
-  if (options.repo) {
-    mkdirSync(dirname(workflowPath), { recursive: true });
-    writeFileSync(workflowPath, markerWorkflow(), { flag: 'wx' });
-  }
-  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, { flag: 'wx' });
-  console.log(`wrote: ${configPath}${options.repo ? `, ${workflowPath}` : ''}\nhelp: Configure steps and skills, ${options.repo ? 'commit both files, ' : ''}then run verify run`);
-}
-
-export async function status({ places }) {
-  const config = loadConfig({ places });
-  loadSettings({ home: places.home });
-  const pr = await pullRequest({ cwd: places.root });
-  const marker = markerFromBody({ body: pr.body });
-  const head = await git({ cwd: places.root, args: ['rev-parse', 'HEAD'] });
-  const dirty = await git({ cwd: places.root, args: ['status', '--porcelain', '--untracked-files=all'] });
-  const current = !dirty && validMarker({ marker, head: pr.headRefOid, localRunCounts: config.localRunCounts !== false }) && head === pr.headRefOid;
-  console.log(`marker: ${current ? 'current' : 'missing or stale'}, head ${pr.headRefOid}`);
-  if (dirty) console.log('worktree: uncommitted changes');
-  if (marker?.binaryFiles?.length) console.log(`${BINARY_NOTE}: ${JSON.stringify(marker.binaryFiles)}`);
-  if (marker) {
-    console.log(`steps: ${marker.mode === 'local' ? 'ran locally' : 'ran in ci'}\nreview: ${JSON.stringify(marker.review)}\nfixed: ${JSON.stringify(marker.fixed || [])}\ndeclined: ${JSON.stringify(marker.declined || [])}\nrestarts: ${JSON.stringify(marker.restarts || [])}`);
-  }
-  if (!current) {
-    const saved = Object.values(readState({ file: places.state })).filter(entry => entry.pr === pr.url).sort((left, right) => Date.parse(left.finishedAt) - Date.parse(right.finishedAt)).at(-1);
-    if (saved?.binaryFiles?.length) console.log(`${BINARY_NOTE}: ${JSON.stringify(saved.binaryFiles)}`);
-    if (saved?.round >= 3 && saved.findings.length) console.log('review: stopped after three rounds\nhelp: An owner must comment: verify restart review: <reason>');
-    if (saved) console.log(`last run head: ${saved.head}\nlast run: ${saved.mode === 'local' ? 'ran locally' : 'ran in ci'}\nreview: ${saved.reviewer}, round ${saved.round}\nfindings: ${JSON.stringify(saved.findings)}\ndeclined: ${JSON.stringify(saved.declines)}\nrestarts: ${JSON.stringify(saved.restarts || [])}`);
-  }
-  console.log(`help: ${current ? 'Ready for the owner to merge' : 'Run verify run on the clean, pushed PR head'}`);
-  return current;
-}
-
-export async function main({ args = process.argv.slice(2), cwd = process.cwd(), env = process.env } = {}) {
-  const { command, options } = parseArgs({ args });
-  if (command === 'help') { console.log(HELP); return 0; }
-  const places = await locations({ cwd, env });
-  if (command === 'init') { init({ places, options }); return 0; }
-  if (command === 'status') return await status({ places }) ? 0 : 1;
-  await run({ places, options, env });
-  return 0;
-}
-
-const entry = process.argv[1];
-if (entry && existsSync(entry) && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(entry)) {
-  try { process.exitCode = await main(); }
-  catch (error) { console.error(`error: ${error.message}\ncode: ${error.code || 'VERIFY'}`); process.exitCode = 1; }
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+  main().catch(error => { console.error(error.message); if (error.code !== 'DIRTY') console.error(`code: ${error.code || 'ERROR'}`); process.exitCode = 1; });
 }

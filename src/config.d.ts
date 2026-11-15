@@ -1,26 +1,10 @@
-export interface ChangeKind {
-  name: string;
-  match: string[];
-  steps: string[];
-  checks: string[] | 'all';
-  skills: string[] | 'all';
-}
 export interface Config {
-  mode: 'local' | 'ci';
-  localRunCounts?: boolean;
-  decline?: 'agent' | 'owner';
-  binary?: 'metadata' | 'fail';
-  ownerLogins?: string[];
-  steps: Record<string, string>;
-  skills: Record<string, string>;
-  kinds: ChangeKind[];
+  commands: Record<string, string>;
+  kinds: { name: string; match: string[]; commands: string[]; checks: string[]; instructions?: string[] }[];
+  instructions?: Record<string, string>;
+  checkFixAttempts?: number;
   reviewerModels?: Record<string, { model?: string; effort?: string }>;
-  reviewers?: Record<string, { command: string[] }>;
+  reviewers?: Record<string, { command: string[]; resume?: string[] }>;
 }
-export function select(options: { config: Config; paths: string[] }): {
-  kinds: string[];
-  steps: string[];
-  skills: string[];
-  checks: string[] | 'all';
-};
-export function validateConfig(options: { config: unknown; root: string }): Config;
+export function validateConfig(input: {config: Config; root: string}): Config;
+export function select(input: {config: Config; paths: string[]}): {kinds: string[]; commands: string[]; checks: string[]; instructions: string[]};
