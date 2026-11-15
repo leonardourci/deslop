@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, readFileSync, rmSync, existsSync, mkdirSync } from 'node:fs';
+import { writeFileSync, readFileSync, rmSync, existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixture } from './fixtures.js';
 
@@ -259,7 +259,7 @@ test('poisoned Git routing cannot redirect fixture writes into another repositor
   let isolated;
   try { isolated = fixture(t); }
   finally { for (const key of Object.keys(poison)) { if (original[key] === undefined) delete process.env[key]; else process.env[key] = original[key]; } }
-  assert.equal(isolated.git('rev-parse', '--show-toplevel'), isolated.root);
+  assert.equal(isolated.git('rev-parse', '--show-toplevel'), realpathSync(isolated.root));
   assert.equal(outside.git('rev-parse', 'HEAD'), before);
   passed(isolated.call('run', '--reviewer', 'fixture'));
 });
