@@ -341,3 +341,14 @@ test('a remote head change during checks cannot pass stale receipts to the revie
   assert.doesNotMatch(f.load().pr.body, /verify:v1/);
 });
 
+test('a code-changing head with missing CI fails closed rather than producing proof', t => {
+  const f = fixture(t);
+  const script = `import { waitForChecks } from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)};
+try { await waitForChecks({ cwd: process.cwd(), head: process.argv[1], names: ['Tests'], timeoutMs: 150, pollMs: 1 }); process.exit(0); }
+catch (error) { console.error('code: ' + error.code); process.exit(1); }`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script, f.load().pr.headRefOid], { cwd: f.root, env: f.env, encoding: 'utf8' });
+  failed(result, 'CI_WAIT');
+  assert.match(result.stdout, /missing/);
+  assert.equal(f.load().prompts, undefined);
+  assert.doesNotMatch(f.load().pr.body, /verify:v1/);
+});
