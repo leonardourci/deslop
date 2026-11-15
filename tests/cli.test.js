@@ -169,8 +169,9 @@ test('unavailable preferred reviewer falls back once, while malformed output can
   const f = fixture(t);
   f.config.reviewers.unavailable = { command: [join(f.home, 'missing-reviewer')] }; f.configure(); f.commit();
   mkdirSync(join(f.home, 'config/verify'), { recursive: true });
-  writeFileSync(join(f.home, 'config/verify/settings.json'), JSON.stringify({ reviewer: ['unavailable', 'fixture'] }));
-  passed(f.call('run'));
+  writeFileSync(join(f.home, 'config/verify/settings.json'), JSON.stringify({ reviewer: ['unavailable', 'fixture'], reviewerModels: { fixture: { model: 'fallback-model', effort: 'low' } } }));
+  passed(f.call('run', '--reviewer-model', 'primary-model', '--reviewer-effort', 'high'));
+  assert.deepEqual(f.load().reviewEnvs, [{ model: 'fallback-model', effort: 'low' }]);
   assert.match(f.load().pr.body, /"provider":"fixture"/);
 });
 

@@ -60,7 +60,8 @@ export function parseReview({ value }) {
 export async function review({ cwd, choices, config, settings, prompt, model, effort, env = process.env }) {
   const errors = [];
   for (const provider of choices) {
-    const choice = modelChoice({ provider, config, settings, model, effort });
+    const primary = provider === choices[0];
+    const choice = modelChoice({ provider, config, settings, model: primary ? model : undefined, effort: primary ? effort : undefined });
     const scratch = mkdtempSync(join(tmpdir(), 'verify-review-'));
     let raw;
     try {
