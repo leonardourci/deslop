@@ -1,17 +1,17 @@
 {
-  "name": "verify",
+  "name": "deslop",
   "version": "0.1.0",
-  "description": "Checks and a fresh agent review for the exact pull request commit",
+  "description": "Review and fix committed work, run checks, and mark the final commit",
   "type": "module",
   "bin": {
-    "verify": "src/cli.js"
+    "deslop": "src/cli.js"
   },
   "engines": {
     "node": ">=22.13"
   },
   "scripts": {
     "test": "node --test",
-    "verify": "node src/cli.js run"
+    "deslop": "node src/cli.js run"
   },
   "dependencies": {
     "picomatch": "4.0.7"

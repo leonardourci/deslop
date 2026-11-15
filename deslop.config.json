@@ -1,0 +1,8 @@
+{
+  "commands": { "tests": "npm test" },
+  "kinds": [
+    { "name": "docs", "match": ["docs/**", "README.md"], "commands": [], "checks": [], "instructions": ["writing"] },
+    { "name": "code", "match": ["**"], "commands": ["tests"], "checks": ["Tests (22.13.0)", "Tests (24)"] }
+  ],
+  "checkFixAttempts": 1
+}
