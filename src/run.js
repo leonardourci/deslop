@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { git, DeslopError } from './process.js';
 import { loadConfig, loadSettings, select, instructionsFor } from './config.js';
@@ -12,12 +12,15 @@ export async function cleanTree({ cwd }) {
   if (await git({ cwd, args: ['status', '--porcelain', '--untracked-files=all'] })) throw new DeslopError('DIRTY', 'commit or stash your changes first');
 }
 async function gitState({ cwd }) {
-  const commands = [['rev-parse', 'HEAD'], ['symbolic-ref', 'HEAD'], ['ls-files', '--stage'], ['config', '--local', '--list']];
+  const commands = [['rev-parse', 'HEAD'], ['symbolic-ref', 'HEAD'], ['ls-files', '--stage'], ['config', '--local', '--list'], ['config', '--worktree', '--list']];
   const values = await Promise.all(commands.map(args => git({ cwd, args })));
-  const hooks = resolve(cwd, await git({ cwd, args: ['rev-parse', '--git-path', 'hooks'] }));
+  let hooksPath;
+  try { hooksPath = await git({ cwd, args: ['config', '--get', 'core.hooksPath'] }); }
+  catch (error) { if (error.code !== 'COMMAND') throw error; }
+  const hooks = resolve(cwd, hooksPath || await git({ cwd, args: ['rev-parse', '--git-path', 'hooks'] }));
   if (existsSync(hooks)) for (const name of readdirSync(hooks).sort()) {
     const path = join(hooks, name);
-    try { values.push(name + readFileSync(path).toString('base64')); } catch (error) { if (error.code !== 'EISDIR') throw error; }
+    try { values.push([name, statSync(path).mode, readFileSync(path).toString('base64')]); } catch (error) { if (error.code !== 'EISDIR') throw error; }
   }
   return createHash('sha256').update(JSON.stringify(values)).digest('hex');
 }

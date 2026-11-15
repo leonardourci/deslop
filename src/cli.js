@@ -22,7 +22,7 @@ async function status({ places, options }) {
   let marker;
   try { marker = JSON.parse(await git({ cwd, args: ['notes', '--ref=deslop', 'show', head] })); } catch (error) { if (error.code !== 'COMMAND' && !(error instanceof SyntaxError)) throw error; }
   const dirty = await git({ cwd, args: ['status', '--porcelain', '--untracked-files=all'] });
-  const valid = !dirty && marker?.version === 1 && marker.head === head && marker.verdict === 'passed' && Array.isArray(marker.checks) && marker.checks.every(check => check.ok === true) && marker.review && marker.review.found === marker.review.fixed;
+  const valid = !dirty && marker?.version === 1 && marker.head === head && marker.verdict === 'passed' && Array.isArray(marker.checks) && marker.checks.every(check => check?.ok === true) && marker.review && Number.isInteger(marker.review.found) && marker.review.found >= 0 && marker.review.found === marker.review.fixed;
   if (!valid) { console.log(`marker: missing or stale, head ${head}`); process.exitCode = 1; return; }
   console.log(`marker: current, head ${head}\ndetails: ${marker.run}\nshape: deslop shape\nlogs: checks[].log (full logs can be large)`);
   if (options.publish) {

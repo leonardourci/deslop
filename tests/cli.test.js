@@ -8,6 +8,50 @@ function passed(result) { assert.equal(result.status, 0, result.stdout + result.
 function failed(result, code) { assert.notEqual(result.status, 0, result.stdout); assert.match(result.stderr, new RegExp(`code: ${code}`)); }
 const finding = { id: 'R1', where: 'work.txt:1', problem: 'bad content', fixed: true };
 
+test('checks cannot change configured hooks or enable an existing hook', t => {
+  for (const change of ['content', 'permissions']) {
+    const f = fixture(t);
+    const hooks = join(f.home, 'custom-hooks');
+    mkdirSync(hooks);
+    const hook = join(hooks, 'pre-commit');
+    writeFileSync(hook, '#!/bin/sh\nexit 0\n', { mode: 0o644 });
+    f.git('config', 'core.hooksPath', hooks);
+    const operation = change === 'content'
+      ? `require('node:fs').writeFileSync(${JSON.stringify(hook)}, 'changed')`
+      : `require('node:fs').chmodSync(${JSON.stringify(hook)}, 0o755)`;
+    const helper = join(f.home, 'change-hook.cjs');
+    writeFileSync(helper, operation);
+    f.config.commands.tests = `node ${JSON.stringify(helper)}`;
+    f.configure(); f.commit();
+    failed(f.call('run', '--reviewer', 'fixture'), 'CHECK_GIT');
+    assert.deepEqual(f.runs()[0].commits, []);
+    assert.equal(f.call('status').status, 1);
+  }
+});
+
+test('checks cannot change worktree-specific git config', t => {
+  const f = fixture(t);
+  f.git('config', 'extensions.worktreeConfig', 'true');
+  f.config.commands.tests = 'git config --worktree core.fileMode false';
+  f.configure(); f.commit();
+  failed(f.call('run', '--reviewer', 'fixture'), 'CHECK_GIT');
+  assert.deepEqual(f.runs()[0].commits, []);
+  assert.equal(f.call('status').status, 1);
+});
+
+test('status rejects malformed proof counts and null checks without crashing', t => {
+  const f = fixture(t), head = f.git('rev-parse', 'HEAD');
+  for (const fields of [{ review: {} }, { review: { found: -1, fixed: -1 } }, { checks: [null] }]) {
+    const marker = { version: 1, head, verdict: 'passed', checks: [], review: { found: 0, fixed: 0 }, ...fields };
+    f.git('notes', '--ref=deslop', 'add', '-f', '-m', JSON.stringify(marker), head);
+    const result = f.call('status', '--publish');
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /marker: missing or stale/);
+    assert.doesNotMatch(result.stderr, /TypeError/);
+  }
+  assert.equal(f.load().github.some(args => args.includes('--method')), false);
+});
+
 test('checks cannot switch to the default branch at the same commit', t => {
   const f = fixture(t);
   f.config.commands.tests = 'git branch -f main HEAD && git switch main';
