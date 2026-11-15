@@ -124,7 +124,7 @@ With `decline: "owner"`, CLI declines are refused. Only a repository owner's PR 
 verify decline R1: The caller validates this value before invoking the function
 ```
 
-For user-owned repositories the owner login is the default. Organization repositories must set `ownerLogins` in repo config. Status shows each accepted decline, its author and reason. Comments must follow the finding's report.
+For user-owned repositories the owner login is the default. Organization repositories must set `ownerLogins` in repo config. Status shows each accepted decline, its author and reason. Accepted reasons remain in later review prompts and owner restarts; the current owner-only policy still decides which can apply. Comments must follow the finding's report.
 
 ## Custom reviewers
 
