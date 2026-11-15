@@ -16,3 +16,5 @@ Each run writes git-ignored `.deslop/runs/<id>/run.json`. It contains verdict, c
 There are no review rounds, declines, owner restart comments, PR-body markers or marker-check workflows. CodeRabbit remains separate and only on request. Both implementation and migration PRs stay open for owner review and merge.
 
 A GitHub outage does not block local proof. Local runs skip the initial pending-status write. Passed checks keep their git note even if status publication fails; output says the proof is local and the status is not published yet. Retry `deslop status --publish` after a push or when GitHub recovers.
+
+The git-state guard covers this checkout’s HEAD, branch, staged index, config and hooks. Other worktrees may commit to their own branches during a run. Provider tool restrictions still deny git operations; unrelated shared refs do not invalidate this checkout.
