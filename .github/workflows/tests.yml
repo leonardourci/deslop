@@ -1,5 +1,10 @@
 name: Tests
 on:
+  push:
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!README.md'
   pull_request:
     paths:
       - '**'
@@ -8,7 +13,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: tests-${{ github.event.pull_request.number }}
+  group: tests-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   tests:

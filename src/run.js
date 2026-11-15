@@ -49,6 +49,7 @@ export async function run({ places, options }) {
 }
 async function performRun({ places, options }) {
   const cwd = places.root;
+  await cleanTree({ cwd });
   const info = await branchInfo({ cwd, override: options.base });
   const config = loadConfig({ places }), settings = loadSettings({ home: places.home });
   const choices = reviewerChoices({ override: options.reviewer, settings });
@@ -83,7 +84,7 @@ async function performRun({ places, options }) {
       const head = await git({ cwd, args: ['rev-parse', 'HEAD'] });
       data.head = head;
       const paths = (await git({ cwd, args: ['diff', '--name-only', '--no-renames', '-z', info.base, head] })).split('\0').filter(Boolean);
-      const currentSelection = select({ config, paths });
+      const currentSelection = select({ config, paths: [...new Set([...initialPaths, ...paths])] });
       const ci = originallyPushed && !options.local && currentSelection.checks.length > 0;
       if (ci && head !== pushedHead) { await pushFixes({ cwd, ...info, expected: pushedHead }); pushedHead = head; }
       const checks = await runChecks({ cwd, dir, config, selection: currentSelection, ci, head, attempt: data.checks.length });

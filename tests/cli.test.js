@@ -8,6 +8,23 @@ function passed(result) { assert.equal(result.status, 0, result.stdout + result.
 function failed(result, code) { assert.notEqual(result.status, 0, result.stdout); assert.match(result.stderr, new RegExp(`code: ${code}`)); }
 const finding = { id: 'R1', where: 'work.txt:1', problem: 'bad content', fixed: true };
 
+test('reverting a changed file during review retains its required checks', t => {
+  const f = fixture(t);
+  f.config.kinds = [
+    { name: 'work', match: ['work.txt'], commands: ['tests'], checks: ['Tests'] },
+    { name: 'other', match: ['**'], commands: [], checks: [] },
+  ];
+  f.configure();
+  f.git('add', '.'); f.git('commit', '-m', 'configure kinds');
+  f.git('branch', 'review-base');
+  writeFileSync(join(f.root, 'work.txt'), 'bad'); f.commit();
+  const s = f.load(); s.actions = [{ edit: 'good', items: [finding] }]; f.save(s);
+  passed(f.call('run', '--base', 'review-base', '--reviewer', 'fixture'));
+  assert.equal(f.runs()[0].checks.length, 1);
+  assert.equal(f.runs()[0].checks[0].name, 'tests');
+  assert.equal(f.runs()[0].checks[0].ok, true);
+});
+
 test('changed directory symlinks are reviewed without reading their targets', t => {
   const f = fixture(t);
   symlinkSync(f.home, join(f.root, 'linked-directory'));
@@ -55,6 +72,27 @@ test('dirty work is refused in one line before any agent call and default branch
   const f = fixture(t); writeFileSync(join(f.root, 'untracked'), 'dirty');
   const result = f.call('run', '--reviewer', 'fixture'); assert.equal(result.stderr.trim(), 'commit or stash your changes first'); assert.equal(f.load().calls.length, 0);
   rmSync(join(f.root, 'untracked')); f.git('switch', 'main'); failed(f.call('run', '--reviewer', 'fixture'), 'BRANCH');
+});
+
+test('work that becomes dirty before the lock is acquired is refused before review', t => {
+  const f = fixture(t);
+  rmSync(join(f.bin, 'git'));
+  writeFileSync(join(f.bin, 'git'), `#!/usr/bin/env node
+const fs=require('node:fs'),cp=require('node:child_process');
+const args=process.argv.slice(2),counter=${JSON.stringify(join(f.home, 'status-count'))};
+if(args[0]==='status') {
+  const count=fs.existsSync(counter)?Number(fs.readFileSync(counter))+1:1;
+  fs.writeFileSync(counter,String(count));
+  if(count===2)fs.writeFileSync('untracked','concurrent edit');
+}
+const result=cp.spawnSync(${JSON.stringify(f.gitBin)},args,{stdio:'inherit'});process.exit(result.status??1);
+`, { mode: 0o755 });
+  const result = f.call('run', '--reviewer', 'fixture');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /commit or stash your changes first/);
+  assert.equal(f.load().calls.length, 0);
+  assert.equal(readFileSync(join(f.root, 'untracked'), 'utf8'), 'concurrent edit');
+  assert.equal(existsSync(join(f.root, '.deslop')), false);
 });
 
 test('an agent trying to commit is detected and cannot receive a marker or push', t => {
