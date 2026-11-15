@@ -389,7 +389,8 @@ async function performRun({ places, options }) {
         description: 'Review fixed and checks passed',
       });
     } catch (error) {
-      if (!['COMMAND', 'ENOENT'].includes(error.code)) throw error;
+      if (!['COMMAND', 'COMMAND_TIMEOUT', 'ENOENT'].includes(error.code))
+        throw error;
       data.published = false;
       data.publicationError = error.message;
     }
@@ -456,6 +457,7 @@ async function invalidate({ cwd, head, branch }) {
       description: 'Review or checks failed',
     });
   } catch (error) {
-    if (!['COMMAND', 'ENOENT'].includes(error.code)) throw error;
+    if (!['COMMAND', 'COMMAND_TIMEOUT', 'ENOENT'].includes(error.code))
+      throw error;
   }
 }

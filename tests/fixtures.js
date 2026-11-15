@@ -77,7 +77,7 @@ const fs=require('node:fs'), cp=require('node:child_process'); const path=proces
 const fs=require('node:fs');const path=process.env.DESLOP_TEST_STATE,args=process.argv.slice(2),s=JSON.parse(fs.readFileSync(path));fs.writeFileSync(require('node:path').join(require('node:path').dirname(path),'gh-call-'+process.pid+'-'+require('node:crypto').randomUUID()),JSON.stringify(args));
 if(args[0]==='pr'){if(!s.pr){console.error('no pull request');process.exit(1)}console.log(JSON.stringify(s.pr));}
 else if(args[0]==='repo')console.log(JSON.stringify({nameWithOwner:'example/project'}));
-else if(args.includes('--method')){if(s.publicationOutage){console.error('GitHub unavailable');process.exit(1)}console.log('{}');}
+else if(args.includes('--method')){if(s.publicationHang){setInterval(()=>{},1000);return;}if(s.publicationOutage){console.error('GitHub unavailable');process.exit(1)}console.log('{}');}
 else if(args.some(a=>a.includes('/check-runs?'))){if(s.transientPoll&&!fs.existsSync(path+'.polled')){fs.writeFileSync(path+'.polled','1');console.error('HTTP 502: Bad Gateway');process.exit(1)}console.log(JSON.stringify([{check_runs:s.checks}]))}
 else if(args.some(a=>a.includes('/statuses?')))console.log(JSON.stringify([s.statuses||[]]));
 else if(args[0]==='run')console.log('FAIL synthetic CI failure\\nassertion failed');

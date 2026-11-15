@@ -395,3 +395,25 @@ test('fresh check repairs receive review items and paths and keep review counts 
   assert.equal(f.runs()[0].review.found, 1);
   assert.equal(f.runs()[0].checkFixes.length, 1);
 });
+
+test('status publication timeouts preserve successful local proof', (t) => {
+  const f = fixture(t);
+  f.push();
+  const preloader = join(f.home, 'timeouts.cjs');
+  writeFileSync(
+    preloader,
+    `const original=setTimeout;global.setTimeout=(fn,ms,...args)=>original(fn,Math.min(ms,1000),...args);`,
+  );
+  f.env.NODE_OPTIONS = `--require=${preloader}`;
+  const s = f.load();
+  s.publicationHang = true;
+  f.save(s);
+  const r = f.call('run', '--local', '--reviewer', 'fixture');
+  pass(r);
+  assert.match(r.stdout, /proof: local git note/);
+  assert.match(f.runs()[0].publicationError, /timed out/);
+  pass(f.call('status'));
+  const publication = f.call('status', '--publish');
+  assert.equal(publication.status, 1);
+  assert.match(publication.stdout, /proof: local git note/);
+});

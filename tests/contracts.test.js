@@ -122,7 +122,7 @@ test('provider preference and per-provider model precedence support hosted Codex
   );
 });
 
-test('CI missing and unreachable waits end with bounded reasons', (t) => {
+test('missing CI checks end at their appearance limit', (t) => {
   const f = fixture(t),
     s = f.load();
   s.checks = [];
@@ -135,4 +135,24 @@ test('CI missing and unreachable waits end with bounded reasons', (t) => {
   });
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /missing/);
+});
+
+test('persistent CI API errors end red with a local rerun hint', (t) => {
+  const f = fixture(t);
+  writeFileSync(
+    join(f.bin, 'gh'),
+    `#!/usr/bin/env node
+if(process.argv[2]==='repo')console.log(JSON.stringify({nameWithOwner:'example/project'}));else {console.error('HTTP 502: Bad Gateway');process.exit(1)}
+`,
+    { mode: 0o755 },
+  );
+  const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)}; await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],timeoutMs:1000,pollMs:1});`;
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: f.root,
+    env: f.env,
+    encoding: 'utf8',
+  });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /GitHub unreachable; rerun with --local/);
+  assert.match(r.stderr, /HTTP 502/);
 });

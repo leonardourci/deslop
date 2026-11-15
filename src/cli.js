@@ -148,7 +148,8 @@ async function status({ places, options }) {
       );
       if (!published) process.exitCode = 1;
     } catch (error) {
-      if (!['COMMAND', 'ENOENT'].includes(error.code)) throw error;
+      if (!['COMMAND', 'COMMAND_TIMEOUT', 'ENOENT'].includes(error.code))
+        throw error;
       console.log(
         'proof: local git note\nstatus: not published yet; retry deslop status --publish when GitHub recovers',
       );

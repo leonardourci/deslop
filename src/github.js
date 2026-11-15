@@ -62,7 +62,8 @@ export async function branchInfo({ cwd, override }) {
       );
       if (pr.state === 'OPEN') requestedBase = pr.baseRefName;
     } catch (error) {
-      if (!['COMMAND', 'ENOENT'].includes(error.code)) throw error;
+      if (!['COMMAND', 'COMMAND_TIMEOUT', 'ENOENT'].includes(error.code))
+        throw error;
     }
   }
   const candidate = requestedBase || defaultBranch;
