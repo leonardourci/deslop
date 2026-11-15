@@ -27,7 +27,14 @@ async function status({ places, options }) {
   console.log(`marker: current, head ${head}\ndetails: ${marker.run}\nshape: deslop shape\nlogs: checks[].log (full logs can be large)`);
   if (options.publish) {
     const branch = await git({ cwd, args: ['symbolic-ref', '--short', 'HEAD'] });
-    console.log(`published: ${await commitStatus({ cwd, head, branch, state: 'success', description: 'Review fixed and checks passed' })}`);
+    try {
+      const published = await commitStatus({ cwd, head, branch, state: 'success', description: 'Review fixed and checks passed' });
+      console.log(`status: ${published ? 'published' : 'not published yet; push the checked commit and retry deslop status --publish'}`);
+      if (!published) process.exitCode = 1;
+    } catch (error) {
+      if (!['COMMAND', 'ENOENT'].includes(error.code)) throw error;
+      console.log('proof: local git note\nstatus: not published yet; retry deslop status --publish when GitHub recovers'); process.exitCode = 1;
+    }
   }
 }
 export async function main({ argv = process.argv.slice(2), cwd = process.cwd() } = {}) {

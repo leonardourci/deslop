@@ -205,3 +205,15 @@ const result=cp.spawnSync(real,args,{stdio:'inherit'});process.exit(result.statu
   failed(f.call('run', '--reviewer', 'fixture'), 'HEAD_CHANGED');
   assert.equal(f.runs()[0].verdict, 'failed'); assert.equal(f.call('status').status, 1);
 });
+
+
+test('a GitHub publication outage cannot block local proof and status can retry later', t => {
+  const f = fixture(t); f.push(); const s = f.load(); s.publicationOutage = true; f.save(s);
+  const result = f.call('run', '--local', '--reviewer', 'fixture'); passed(result);
+  assert.match(result.stdout, /proof: local/); assert.match(result.stdout, /status: not published yet/);
+  assert.equal(f.runs()[0].published, false); passed(f.call('status'));
+  assert.equal(f.load().github.some(args => args.includes('state=pending')), false);
+  const recovered = f.load(); recovered.publicationOutage = false; f.save(recovered);
+  passed(f.call('status', '--publish'));
+  assert.ok(f.load().github.some(args => args.includes('state=success')));
+});

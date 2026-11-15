@@ -64,10 +64,10 @@ async function performRun({ places, options }) {
   const save = () => writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
   try {
     try { await git({ cwd, args: ['notes', '--ref=deslop', 'remove', initialHead] }); } catch (error) { if (error.code !== 'COMMAND') throw error; }
-    if (originallyPushed) await commitStatus({ cwd, head: initialHead, branch: info.branch, state: 'pending', description: 'Review and checks running' });
     const initialPaths = (await git({ cwd, args: ['diff', '--name-only', '--no-renames', '-z', info.base, initialHead] })).split('\0').filter(Boolean);
     if (!initialPaths.length) throw new DeslopError('NO_CHANGES', 'No commits to review against the base');
     const selection = select({ config, paths: initialPaths });
+    if (originallyPushed && !options.local && selection.checks.length) await commitStatus({ cwd, head: initialHead, branch: info.branch, state: 'pending', description: 'Review and checks running' });
     const diff = await git({ cwd, args: ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', info.base, initialHead] });
     const files = initialPaths.map(path => {
       const absolute = resolve(cwd, path);
@@ -108,7 +108,11 @@ async function performRun({ places, options }) {
     data.verdict = 'passed';
     const marker = { version: 1, head: data.head, verdict: 'passed', review: data.review, checks: data.finalChecks, commits: data.commits, finishedAt: new Date().toISOString(), run: `.deslop/runs/${runId}/run.json` };
     await git({ cwd, args: ['notes', '--ref=deslop', 'add', '-f', '-m', JSON.stringify(marker), data.head] });
-    data.published = await commitStatus({ cwd, head: data.head, branch: info.branch, state: 'success', description: 'Review fixed and checks passed' });
+    try { data.published = await commitStatus({ cwd, head: data.head, branch: info.branch, state: 'success', description: 'Review fixed and checks passed' }); }
+    catch (error) {
+      if (!['COMMAND', 'ENOENT'].includes(error.code)) throw error;
+      data.published = false; data.publicationError = error.message;
+    }
     return data;
   } catch (error) {
     if (data.verdict === 'passed') { try { await git({ cwd, args: ['notes', '--ref=deslop', 'remove', data.head] }); } catch {} }
@@ -117,6 +121,7 @@ async function performRun({ places, options }) {
 }
 export function printSummary({ data, path }) {
   console.log(`verdict: ${data.verdict}`);
+  if (data.verdict === 'passed') console.log(`proof: ${data.published ? 'git note and GitHub status' : 'local git note'}\nstatus: ${data.published ? 'published' : 'not published yet; run deslop status --publish after pushing or when GitHub recovers'}`);
   for (const check of data.checks) console.log(`check: ${check.name} ${check.ok ? 'pass' : 'fail'}`);
   for (const item of data.review.items) console.log(`review: ${item.id} ${item.fixed ? 'fixed' : 'unfixed'} ${item.problem.replaceAll('\n', ' ').slice(0, 240)}`);
   console.log(`commits: ${data.commits.join(', ') || 'none'}\ndetails: ${path}\nshape: deslop shape\nlogs: checks[].log (full logs can be large)`);
