@@ -20,6 +20,7 @@ test('CI uses newest exact-name checks and never waits for the marker', () => {
     { id: 1, name: 'Tests', status: 'completed', conclusion: 'success' },
     { id: 2, name: 'Tests', status: 'in_progress' },
     { id: 3, name: 'verify', status: 'queued' },
+    { id: 4, name: 'CodeRabbit', status: 'in_progress', app: { slug: 'coderabbitai' } },
   ];
   assert.deepEqual(checkStates({ runs, statuses: [], names: ['Tests', 'Missing'] }), [{ name: 'Tests', state: 'in_progress' }, { name: 'Missing', state: 'missing' }]);
   assert.deepEqual(checkStates({ runs, statuses: [{ id: 4, context: 'Legacy', state: 'success' }], names: 'all' }), [{ name: 'Tests', state: 'in_progress' }, { name: 'Legacy', state: 'success' }]);

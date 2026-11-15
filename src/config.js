@@ -4,10 +4,10 @@ import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import picomatch from 'picomatch';
 import { git, VerifyError } from './process.js';
+import { separateCheck } from './github.js';
 
 export const CONFIG_FILE = 'verify.config.json';
 export const WORKFLOW_FILE = '.github/workflows/verify.yml';
-export const MARKER_CHECK = 'verify';
 
 export function machineHome({ env = process.env } = {}) {
   return join(env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'verify');
@@ -60,7 +60,7 @@ export function validateConfig({ config, root }) {
     requireConfig({ condition: stringList(kind.steps), message: `${label}.steps must be an array` });
     requireConfig({ condition: kind.checks === 'all' || stringList(kind.checks), message: `${label}.checks must be names or all` });
     requireConfig({ condition: kind.skills === 'all' || stringList(kind.skills), message: `${label}.skills must be names or all` });
-    requireConfig({ condition: kind.checks === 'all' || !kind.checks.includes(MARKER_CHECK), message: `${label}.checks cannot wait for verify's marker check` });
+    requireConfig({ condition: kind.checks === 'all' || !kind.checks.some(name => separateCheck({ name })), message: `${label}.checks cannot wait for the marker check or CodeRabbit` });
     for (const step of kind.steps) requireConfig({ condition: Object.hasOwn(config.steps, step), message: `${label}.steps: unknown step ${step}` });
     if (kind.skills !== 'all') for (const skill of kind.skills) requireConfig({ condition: Object.hasOwn(config.skills, skill), message: `${label}.skills: unknown skill ${skill}` });
   }

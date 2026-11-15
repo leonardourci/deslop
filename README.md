@@ -81,7 +81,7 @@ verify run --reviewer claude --reviewer-model <claude-model> --reviewer-effort h
 
 Each changed file uses its first matching kind. A change spanning kinds needs the union of their steps, checks and skills. Put specific matches before a catch-all. Renames count both paths. A file with no matching kind stops verification. Missing skill files and unknown steps or skills fail before any steps run.
 
-Checks can be an array of exact GitHub check names or `"all"`. Empty arrays wait for nothing. `"all"` waits for every reported check except the `verify` marker check. Missing checks keep waiting; failures and skipped or neutral checks fail. A wait expires with instructions to resolve CI or run locally. The marker check is never a dependency of itself.
+Checks can be an array of exact GitHub check names or `"all"`. Empty arrays wait for nothing. `"all"` waits for every reported check except the `verify` marker check and CodeRabbit. Missing checks keep waiting; failures and skipped or neutral checks fail. A wait expires with instructions to resolve CI or run locally. The marker check is never a dependency of itself.
 
 ## Machine settings
 
@@ -102,7 +102,7 @@ All settings are optional. Local runs have no limit by default. Setting `maxLoca
 
 Reviewer selection: `--reviewer`, then the machine preference, then the running agent. A preference list tries the next provider when a provider cannot run. Invalid review output fails closed. Codex detection uses `CODEX_THREAD_ID` or `CODEX_SESSION_ID`, including hosted sessions. Claude detection uses `CLAUDECODE` or `CLAUDE_CODE_ENTRYPOINT`. When detection fails, pass `--reviewer`. A run without a review cannot pass.
 
-Model and effort selection for each provider: CLI override, machine settings, repo `reviewerModels`, then the provider's own defaults. Provider options never spill into another provider's settings.
+Model and effort selection for each provider: CLI override, machine settings, repo `reviewerModels`, then the provider's own defaults. One-run model and effort flags apply to the primary reviewer; a fallback uses its own saved settings or provider defaults.
 
 ## Findings and follow-up
 

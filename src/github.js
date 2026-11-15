@@ -50,14 +50,19 @@ export async function clearMarker({ cwd, head }) {
   await github({ cwd, args: ['pr', 'edit', String(pr.number), '--body-file', '-'], input: `${body}\n` });
 }
 
+export function separateCheck({ name, app }) {
+  const provider = app?.slug || app?.name || '';
+  return name === 'verify' || /^coderabbit(?:ai)?$/i.test(name) || /^coderabbit(?:ai)?$/i.test(provider);
+}
+
 export function checkStates({ runs, statuses, names }) {
   const latest = new Map();
   for (const run of [...runs].sort((left, right) => right.id - left.id)) {
-    if (run.name === 'verify' || latest.has(run.name)) continue;
+    if (separateCheck({ name: run.name, app: run.app }) || latest.has(run.name)) continue;
     latest.set(run.name, { name: run.name, state: run.status === 'completed' ? run.conclusion : run.status });
   }
   for (const status of [...statuses].sort((left, right) => right.id - left.id)) {
-    if (status.context === 'verify' || latest.has(status.context)) continue;
+    if (separateCheck({ name: status.context }) || latest.has(status.context)) continue;
     latest.set(status.context, { name: status.context, state: status.state });
   }
   const requested = names === 'all' ? [...latest.keys()] : names;
