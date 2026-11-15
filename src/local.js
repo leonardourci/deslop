@@ -1,23 +1,88 @@
-import { DatabaseSync } from 'node:sqlite';
+import {
+  openSync,
+  closeSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { DeslopError } from './process.js';
 
 function alive({ pid }) {
-  try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; }
+  if (!Number.isInteger(pid) || pid <= 0) return true;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code !== 'ESRCH';
+  }
 }
 
 export async function exclusiveRun({ file, work }) {
-  const db = new DatabaseSync(file);
-  db.exec('PRAGMA busy_timeout=10000; CREATE TABLE IF NOT EXISTS active (id INTEGER PRIMARY KEY CHECK (id = 1), pid INTEGER NOT NULL)');
-  db.exec('BEGIN IMMEDIATE');
-  try {
-    const owner = db.prepare('SELECT pid FROM active WHERE id = 1').get();
-    if (owner && alive({ pid: owner.pid })) throw new DeslopError('RUN_IN_PROGRESS', 'Verification is already running in this checkout');
-    db.exec('DELETE FROM active');
-    db.prepare('INSERT INTO active (id, pid) VALUES (1, ?)').run(process.pid);
-    db.exec('COMMIT');
-  } catch (error) { db.exec('ROLLBACK'); db.close(); throw error; }
-  const clean = () => db.prepare('DELETE FROM active WHERE id = 1 AND pid = ?').run(process.pid);
+  for (;;) {
+    try {
+      const fd = openSync(file, 'wx');
+      writeFileSync(fd, String(process.pid));
+      closeSync(fd);
+      break;
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      let pid;
+      try {
+        pid = Number(readFileSync(file, 'utf8'));
+      } catch (readError) {
+        if (readError.code === 'ENOENT') continue;
+        throw readError;
+      }
+      if (alive({ pid }))
+        throw new DeslopError(
+          'RUN_IN_PROGRESS',
+          'deslop is already running in this checkout',
+        );
+      // Claim a dead owner's file atomically so competing takers cannot unlink a new lock.
+      const claim = `${file}.reclaim`;
+      let fd;
+      try {
+        fd = openSync(claim, 'wx');
+        writeFileSync(fd, String(process.pid));
+      } catch (claimError) {
+        if (claimError.code !== 'EEXIST') throw claimError;
+        try {
+          const claimant = Number(readFileSync(claim, 'utf8'));
+          if (!alive({ pid: claimant })) {
+            unlinkSync(claim);
+            continue;
+          }
+        } catch (readError) {
+          if (readError.code === 'ENOENT') continue;
+          throw readError;
+        }
+        throw new DeslopError(
+          'RUN_IN_PROGRESS',
+          'deslop lock is being recovered; retry',
+        );
+      }
+      try {
+        if (Number(readFileSync(file, 'utf8')) === pid) unlinkSync(file);
+      } catch (reclaimError) {
+        if (reclaimError.code !== 'ENOENT') throw reclaimError;
+      } finally {
+        closeSync(fd);
+        unlinkSync(claim);
+      }
+    }
+  }
+  const clean = () => {
+    try {
+      if (Number(readFileSync(file, 'utf8')) === process.pid) unlinkSync(file);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  };
   process.once('exit', clean);
-  try { return await work(); }
-  finally { process.removeListener('exit', clean); clean(); db.close(); }
+  try {
+    return await work();
+  } finally {
+    process.removeListener('exit', clean);
+    clean();
+  }
 }
