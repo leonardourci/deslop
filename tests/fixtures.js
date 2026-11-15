@@ -41,5 +41,5 @@ else {console.error('unexpected gh args');process.exit(2)}
   const call = (...args) => spawnSync(process.execPath, [cli, ...args], { cwd: root, env, encoding: 'utf8' });
   const runs = () => readdirSync(join(root, '.deslop', 'runs')).map(id => JSON.parse(readFileSync(join(root, '.deslop', 'runs', id, 'run.json'), 'utf8')));
   const push = () => { const remote = join(home, 'remote.git'); execFileSync('git', ['init', '--bare', remote], { env, stdio: 'ignore' }); git('remote', 'add', 'origin', remote); git('push', 'origin', `${base}:refs/heads/main`); git('push', '-u', 'origin', 'HEAD:refs/heads/change'); git('symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main'); };
-  return { home, root, env, config, configure, git, commit, call, load, save, runs, push, cli };
+  return { home, root, bin, gitBin, env, config, configure, git, commit, call, load, save, runs, push, cli };
 }
