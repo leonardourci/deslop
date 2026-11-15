@@ -8,6 +8,32 @@ function passed(result) { assert.equal(result.status, 0, result.stdout + result.
 function failed(result, code) { assert.notEqual(result.status, 0, result.stdout); assert.match(result.stderr, new RegExp(`code: ${code}`)); }
 const finding = { id: 'R1', where: 'work.txt:1', problem: 'bad content', fixed: true };
 
+test('removing a file introduced by an earlier fix retains its required checks', t => {
+  const f = fixture(t);
+  f.config.commands.extra = 'node -e "process.exit(1)"';
+  f.config.kinds = [
+    { name: 'extra', match: ['extra.txt'], commands: ['extra'], checks: [] },
+    { name: 'other', match: ['**'], commands: [], checks: [] },
+  ];
+  f.config.reviewers.fixture = { command: ['node', '-e', `
+    const fs = require('node:fs');
+    process.stdin.resume();
+    process.stdin.on('end', () => {
+      if (fs.existsSync('extra.txt')) fs.unlinkSync('extra.txt');
+      else fs.writeFileSync('extra.txt', 'introduced by review');
+      console.log(JSON.stringify({items: []}));
+    });
+  `] };
+  f.configure(); f.commit();
+  const result = f.call('run', '--reviewer', 'fixture');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  const data = f.runs()[0];
+  assert.deepEqual(data.checks.map(check => check.name), ['extra', 'extra']);
+  assert.ok(data.checks.every(check => !check.ok));
+  assert.equal(existsSync(join(f.root, 'extra.txt')), false);
+  assert.equal(f.call('status').status, 1);
+});
+
 test('reverting a changed file during review retains its required checks', t => {
   const f = fixture(t);
   f.config.kinds = [
@@ -103,15 +129,15 @@ test('an agent trying to commit is detected and cannot receive a marker or push'
 });
 
 test('pushed CI runs push only review fixes and publish an exact-head status without a PR', t => {
-  const f = fixture(t); f.push(); const initial = f.git('rev-parse', 'HEAD');
-  const s = f.load(); s.actions = [{ edit: 'better', items: [finding] }]; f.save(s);
+  const f = fixture(t); writeFileSync(join(f.root, 'work.txt'), 'bad'); f.commit(); f.push(); const initial = f.git('rev-parse', 'HEAD');
+  const s = f.load(); s.actions = [{ edit: 'good', items: [finding] }]; f.save(s);
   passed(f.call('run', '--reviewer', 'fixture'));
   const head = f.git('rev-parse', 'HEAD'); assert.notEqual(head, initial);
   assert.equal(f.git('ls-remote', 'origin', 'refs/heads/change').split(/\s/)[0], head);
   const calls = f.load().github;
   assert.ok(calls.some(args => args.includes(`repos/example/project/commits/${head}/check-runs?per_page=100`)));
   assert.ok(calls.some(args => args.includes(`repos/example/project/statuses/${head}`) && args.includes('state=success')));
-  assert.equal(f.runs()[0].checks[0].name, 'Tests');
+  assert.deepEqual(f.runs()[0].checks.map(check => check.name), ['tests', 'Tests']);
   const red = f.load(); red.checks[0].conclusion = 'failure'; f.save(red);
   assert.equal(f.call('run', '--reviewer', 'fixture').status, 1);
   assert.equal(f.call('status').status, 1);
@@ -175,8 +201,8 @@ test('installed executable symlinks invoke the command and removed flags are rej
 
 
 test('failed CI resumes the agent, pushes only its fix and waits on the new exact head', t => {
-  const f = fixture(t); f.push(); const initial = f.git('rev-parse', 'HEAD');
-  const s = f.load(); s.checks[0].conclusion = 'failure'; s.actions = [{}, { edit: 'good\n', items: [finding], checks: [{ id: 2, name: 'Tests', status: 'completed', conclusion: 'success' }] }]; f.save(s);
+  const f = fixture(t); writeFileSync(join(f.root, 'work.txt'), 'bad'); f.commit(); f.push(); const initial = f.git('rev-parse', 'HEAD');
+  const s = f.load(); s.checks[0].conclusion = 'failure'; s.actions = [{}, { edit: 'good', items: [finding], checks: [{ id: 2, name: 'Tests', status: 'completed', conclusion: 'success' }] }]; f.save(s);
   passed(f.call('run', '--reviewer', 'fixture'));
   const head = f.git('rev-parse', 'HEAD'); assert.notEqual(head, initial);
   assert.deepEqual(f.load().calls[1].args, ['--resume', 'session-fixture']);

@@ -67,6 +67,7 @@ async function performRun({ places, options }) {
     const initialPaths = (await git({ cwd, args: ['diff', '--name-only', '--no-renames', '-z', info.base, initialHead] })).split('\0').filter(Boolean);
     if (!initialPaths.length) throw new DeslopError('NO_CHANGES', 'No commits to review against the base');
     const selection = select({ config, paths: initialPaths });
+    const requiredPaths = new Set(initialPaths);
     if (originallyPushed && !options.local && selection.checks.length) await commitStatus({ cwd, head: initialHead, branch: info.branch, state: 'pending', description: 'Review and checks running' });
     const diff = await git({ cwd, args: ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', info.base, initialHead] });
     const files = initialPaths.map(path => {
@@ -84,7 +85,8 @@ async function performRun({ places, options }) {
       const head = await git({ cwd, args: ['rev-parse', 'HEAD'] });
       data.head = head;
       const paths = (await git({ cwd, args: ['diff', '--name-only', '--no-renames', '-z', info.base, head] })).split('\0').filter(Boolean);
-      const currentSelection = select({ config, paths: [...new Set([...initialPaths, ...paths])] });
+      for (const path of paths) requiredPaths.add(path);
+      const currentSelection = select({ config, paths: [...requiredPaths] });
       const ci = originallyPushed && !options.local && currentSelection.checks.length > 0;
       if (ci && head !== pushedHead) { await pushFixes({ cwd, ...info, expected: pushedHead }); pushedHead = head; }
       const checks = await runChecks({ cwd, dir, config, selection: currentSelection, ci, head, attempt: data.checks.length });
