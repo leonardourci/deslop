@@ -295,7 +295,7 @@ async function performRun({ places, options }) {
         break;
       }
       await invalidateVerdict({ head: completedHead });
-      if (checks.some((check) => check.fixable === false))
+      if (checks.some((check) => !check.ok && check.fixable === false))
         throw new DeslopError(
           'CI_STATE',
           'CI cannot be fixed by editing code; see check logs',

@@ -24,3 +24,37 @@ test('CI waiting replaces local commands rather than running both', (t) => {
   );
   assert.equal(f.call('status').status, 0);
 });
+
+test('successful CI checks do not prevent repairing another failed check', (t) => {
+  const f = fixture(t);
+  f.config.kinds[0].checks = ['Passed', 'Tests'];
+  f.configure();
+  f.commit();
+  f.push();
+  const success = {
+    id: 1,
+    name: 'Passed',
+    status: 'completed',
+    conclusion: 'success',
+  };
+  const s = f.load();
+  s.checks = [
+    success,
+    { id: 2, name: 'Tests', status: 'completed', conclusion: 'failure' },
+  ];
+  s.actions = [
+    {},
+    {
+      edit: 'fixed',
+      checks: [
+        success,
+        { id: 3, name: 'Tests', status: 'completed', conclusion: 'success' },
+      ],
+    },
+  ];
+  f.save(s);
+  const r = f.call('run', '--reviewer', 'fixture');
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(f.load().calls.length, 2);
+  assert.equal(f.call('status').status, 0);
+});
