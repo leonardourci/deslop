@@ -1,0 +1,11 @@
+{
+  "mode": "ci",
+  "localRunCounts": true,
+  "decline": "agent",
+  "steps": { "tests": "npm test" },
+  "kinds": [
+    { "name": "docs", "match": ["docs/**", "README.md"], "steps": [], "checks": [], "skills": ["review"] },
+    { "name": "code", "match": ["**"], "steps": ["tests"], "checks": ["Tests (22.13.0)", "Tests (24)"], "skills": ["review"] }
+  ],
+  "skills": { "review": ".agents/skills/review/SKILL.md" }
+}
