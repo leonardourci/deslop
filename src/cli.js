@@ -80,8 +80,10 @@ export async function status({ places }) {
   const pr = await pullRequest({ cwd: places.root });
   const marker = markerFromBody({ body: pr.body });
   const head = await git({ cwd: places.root, args: ['rev-parse', 'HEAD'] });
-  const current = validMarker({ marker, head: pr.headRefOid, localRunCounts: config.localRunCounts !== false }) && head === pr.headRefOid;
+  const dirty = await git({ cwd: places.root, args: ['status', '--porcelain', '--untracked-files=all'] });
+  const current = !dirty && validMarker({ marker, head: pr.headRefOid, localRunCounts: config.localRunCounts !== false }) && head === pr.headRefOid;
   console.log(`marker: ${current ? 'current' : 'missing or stale'}, head ${pr.headRefOid}`);
+  if (dirty) console.log('worktree: uncommitted changes');
   if (marker) {
     console.log(`steps: ${marker.mode === 'local' ? 'ran locally' : 'ran in ci'}\nreview: ${JSON.stringify(marker.review)}\nfixed: ${JSON.stringify(marker.fixed || [])}\ndeclined: ${JSON.stringify(marker.declined || [])}\nrestarts: ${JSON.stringify(marker.restarts || [])}`);
   }

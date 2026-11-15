@@ -35,16 +35,17 @@ export async function run({ places, options, env = process.env }) {
 }
 
 async function performRun({ places, options, env }) {
+  const cwd = places.root;
+  const head = await git({ cwd, args: ['rev-parse', 'HEAD'] });
+  const pr = await pullRequest({ cwd });
+  if (pr.headRefOid !== head) throw new VerifyError('HEAD_CHANGED', 'Push HEAD to the pull request before verification');
+  await clearMarker({ cwd, head });
   const config = loadConfig({ places });
   const settings = loadSettings({ home: places.home });
   const choices = reviewerChoices({ override: options.reviewer, settings, env });
   const mode = options.local ? 'local' : config.mode;
   if (mode === 'local' && config.mode === 'ci' && config.localRunCounts === false) throw new VerifyError('LOCAL_REFUSED', 'This repository requires CI verification');
-  const cwd = places.root;
-  const head = await git({ cwd, args: ['rev-parse', 'HEAD'] });
   await cleanHead({ cwd, head });
-  const pr = await pullRequest({ cwd });
-  if (pr.headRefOid !== head) throw new VerifyError('HEAD_CHANGED', 'Push HEAD to the pull request before verification');
   const base = await git({ cwd, args: ['merge-base', head, pr.baseRefOid] });
   const paths = (await git({ cwd, args: ['diff', '--name-only', '--no-renames', '-z', base, head] })).split('\0').filter(Boolean);
   const selection = select({ config, paths });
@@ -70,7 +71,6 @@ async function performRun({ places, options, env }) {
   }
   if (narrow) fixDiff = await git({ cwd, args: ['diff', '--no-ext-diff', '--no-textconv', '--binary', previous.head, head] });
   console.log(`change: ${selection.kinds.join(', ')}; ${paths.length} files\nsteps: ${mode === 'local' ? 'ran locally' : 'waiting for GitHub CI'}, head ${head}`);
-  await clearMarker({ cwd, head });
   let stepNames;
   if (mode === 'local') {
     stepNames = await localSlot({ home: places.home, limit: settings.maxLocalRuns, work: async () => await runSteps({ cwd, names: selection.steps, commands: config.steps, assertHead: async () => await cleanHead({ cwd, head }) }) });
