@@ -403,6 +403,9 @@ test('fresh check repairs receive review items and paths and keep review counts 
 
 test('status publication timeouts preserve successful local proof', (t) => {
   const f = fixture(t);
+  f.config.publishLocal = true;
+  f.configure();
+  f.commit();
   f.push();
   const preloader = join(f.home, 'timeouts.cjs');
   writeFileSync(

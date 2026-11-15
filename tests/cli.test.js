@@ -589,6 +589,9 @@ const result=cp.spawnSync(real,args,{stdio:'inherit'});process.exit(result.statu
 
 test('a GitHub publication outage cannot block local proof and status can retry later', (t) => {
   const f = fixture(t);
+  f.config.publishLocal = true;
+  f.configure();
+  f.commit();
   f.push();
   const s = f.load();
   s.publicationOutage = true;

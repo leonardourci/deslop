@@ -8,14 +8,22 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CONFIG_FILE, locations, readJson, validateConfig } from './config.js';
+import {
+  CONFIG_FILE,
+  locations,
+  readJson,
+  validateConfig,
+  loadConfig,
+  select,
+} from './config.js';
 import { git, DeslopError } from './process.js';
 import { run } from './run.js';
 import { dirtyPaths, optionalGit } from './git.js';
 import { requiredValue } from './prompt.js';
 import { loadSettings } from './config.js';
 import { runningAgent } from './review.js';
-import { commitStatus } from './github.js';
+import { branchInfo } from './github.js';
+import { publishSuccess } from './publication.js';
 
 const SHAPE = {
   verdict: 'passed|failed',
@@ -137,16 +145,40 @@ async function status({ places, options }) {
       args: ['symbolic-ref', '--short', 'HEAD'],
     });
     try {
-      const published = await commitStatus({
+      const config = loadConfig({ places });
+      let selection;
+      if (Array.isArray(marker.ciChecks) && Array.isArray(marker.requiredCI)) {
+        selection = {
+          checks: marker.ciChecks,
+          requiredChecks: marker.requiredCI,
+        };
+      } else {
+        const info = await branchInfo({ cwd });
+        const paths = (
+          await git({
+            cwd,
+            args: [
+              'diff',
+              '--name-only',
+              '--no-renames',
+              '-z',
+              info.base,
+              head,
+            ],
+          })
+        )
+          .split('\0')
+          .filter(Boolean);
+        selection = select({ config, paths });
+      }
+      const { published, statusReason } = await publishSuccess({
         cwd,
         head,
         branch,
-        state: 'success',
-        description: 'Review fixed and checks passed',
+        config,
+        selection,
       });
-      console.log(
-        `status: ${published ? 'published' : 'not published yet; push the checked commit and retry deslop status --publish'}`,
-      );
+      console.log(`status: ${published ? 'published' : statusReason}`);
       if (!published) process.exitCode = 1;
     } catch (error) {
       if (!['COMMAND', 'COMMAND_TIMEOUT', 'ENOENT'].includes(error.code))

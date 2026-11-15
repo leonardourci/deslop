@@ -12,6 +12,7 @@ import { git, DeslopError } from './process.js';
 import { loadConfig, loadSettings, select, instructionsFor } from './config.js';
 import { branchInfo, remoteHead, pushFixes, commitStatus } from './github.js';
 import { reviewerChoices, reviewPrompt, review } from './review.js';
+import { publishSuccess } from './publication.js';
 import { runChecks } from './checks.js';
 import { dirtyPaths, optionalGit, gitState } from './git.js';
 import { exclusiveRun } from './local.js';
@@ -226,7 +227,9 @@ async function performRun({ places, options }) {
     }
     let fixes = 0,
       checkedHead,
-      finalChecks;
+      finalChecks,
+      finalSelection,
+      localProof;
     for (;;) {
       const head = await git({ cwd, args: ['rev-parse', 'HEAD'] });
       data.head = head;
@@ -288,9 +291,38 @@ async function performRun({ places, options }) {
           ...new Set([...(data.unstableCommands || []), ...editedCommands]),
         ];
       }
+      if (!ci && currentSelection.requiredChecks.length) {
+        const ciHead = data.head;
+        if (
+          (await remoteHead({ cwd, branch: info.branch }).catch(() => null)) !==
+          ciHead
+        )
+          throw new DeslopError(
+            'CI_REQUIRED',
+            'Required CI has not run on this commit; push it and rerun deslop',
+          );
+        const requiredChecks = await runChecks({
+          cwd,
+          dir,
+          config,
+          selection: {
+            ...currentSelection,
+            checks: currentSelection.requiredChecks,
+          },
+          ci: true,
+          head: ciHead,
+          attempt: data.checks.length,
+        });
+        data.checks.push(...requiredChecks);
+        checks = [...checks, ...requiredChecks];
+        save();
+        await assertCheckState();
+      }
       const completedHead = data.head;
       if (checks.every((check) => check.ok)) {
         finalChecks = checks;
+        finalSelection = currentSelection;
+        localProof = !ci;
         checkedHead = completedHead;
         break;
       }
@@ -371,6 +403,8 @@ async function performRun({ places, options }) {
       verdict: 'passed',
       review: data.review,
       checks: finalChecks,
+      ciChecks: finalSelection.checks,
+      requiredCI: finalSelection.requiredChecks,
       commits: data.commits,
       finishedAt: new Date().toISOString(),
       run: `.deslop/runs/${runId}/run.json`,
@@ -388,13 +422,17 @@ async function performRun({ places, options }) {
       ],
     });
     try {
-      data.published = await commitStatus({
-        cwd,
-        head: data.head,
-        branch: info.branch,
-        state: 'success',
-        description: 'Review fixed and checks passed',
-      });
+      Object.assign(
+        data,
+        await publishSuccess({
+          cwd,
+          head: data.head,
+          branch: info.branch,
+          config,
+          selection: finalSelection,
+          local: localProof,
+        }),
+      );
     } catch (error) {
       if (!['COMMAND', 'COMMAND_TIMEOUT', 'ENOENT'].includes(error.code))
         throw error;
@@ -421,7 +459,7 @@ function printSummary({ data, path }) {
   console.log(`verdict: ${data.verdict}`);
   if (data.verdict === 'passed')
     console.log(
-      `proof: ${data.published ? 'git note and GitHub status' : 'local git note'}\nstatus: ${data.published ? 'published' : 'not published yet; run deslop status --publish after pushing or when GitHub recovers'}`,
+      `proof: ${data.published ? 'git note and GitHub status' : 'local git note'}\nstatus: ${data.published ? 'published' : data.statusReason || 'not published yet; run deslop status --publish after pushing or when GitHub recovers'}`,
     );
   for (const check of data.checks)
     console.log(`check: ${check.name} ${check.ok ? 'pass' : 'fail'}`);
