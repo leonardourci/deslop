@@ -297,3 +297,31 @@ test('the installed command runs through its executable symlink', t => {
   assert.match(result.stdout, /verify run/);
   assert.match(result.stdout, /verify status/);
 });
+
+test('Claude reviews are fresh and tool-free, reject malformed output and fall back only when unavailable', t => {
+  const f = fixture(t);
+  f.config.reviewerModels = { claude: { model: 'repo-claude', effort: 'low' }, fixture: { model: 'fallback-model' } };
+  f.configure(); f.commit();
+  writeFileSync(join(f.home, 'bin', 'claude'), `#!/usr/bin/env node
+const fs=require('node:fs');let prompt='';process.stdin.on('data',chunk=>prompt+=chunk);process.stdin.on('end',()=>{const path=process.env.VERIFY_TEST_STATE;const state=JSON.parse(fs.readFileSync(path));state.claudeArgs=process.argv.slice(2);state.claudePrompt=prompt;fs.writeFileSync(path,JSON.stringify(state));if(state.badClaude){console.log('not JSON');return;}console.log(JSON.stringify(state.unavailableClaude?{is_error:true}:{is_error:false,structured_output:{findings:[]}}));});`, { mode: 0o755 });
+  passed(f.call('run', '--reviewer', 'claude', '--reviewer-model', 'run-claude', '--reviewer-effort', 'high'));
+  const first = f.load();
+  assert.equal(first.claudeArgs[first.claudeArgs.indexOf('--model') + 1], 'run-claude');
+  assert.equal(first.claudeArgs[first.claudeArgs.indexOf('--effort') + 1], 'high');
+  assert.equal(first.claudeArgs[first.claudeArgs.indexOf('--tools') + 1], '');
+  assert.ok(first.claudeArgs.includes('--safe-mode'));
+  assert.ok(first.claudeArgs.includes('--no-session-persistence'));
+  assert.ok(first.claudeArgs.includes('--strict-mcp-config'));
+  assert.match(first.claudePrompt, /work.txt/);
+  assert.match(first.pr.body, /"provider":"claude"/);
+  mkdirSync(join(f.home, 'config', 'verify'), { recursive: true });
+  writeFileSync(join(f.home, 'config', 'verify', 'settings.json'), JSON.stringify({ reviewer: ['claude', 'fixture'] }));
+  first.badClaude = true; f.save(first);
+  failed(f.call('run'), 'REVIEW_OUTPUT');
+  assert.equal(f.load().reviewEnvs, undefined);
+  assert.doesNotMatch(f.load().pr.body, /verify:v1/);
+  const unavailable = f.load(); unavailable.badClaude = false; unavailable.unavailableClaude = true; f.save(unavailable);
+  passed(f.call('run', '--reviewer-model', 'primary-model'));
+  assert.deepEqual(f.load().reviewEnvs, [{ model: 'fallback-model' }]);
+  assert.match(f.load().pr.body, /"provider":"fixture"/);
+});
