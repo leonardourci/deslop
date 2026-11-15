@@ -16,20 +16,11 @@
   "dependencies": {
     "picomatch": "4.0.7"
   },
-  "exports": {
-    "./config": {
-      "types": "./src/config.d.ts",
-      "default": "./src/config.js"
-    }
-  },
   "files": [
     "src",
     "README.md",
     "docs",
     "LICENSE"
   ],
-  "license": "Apache-2.0",
-  "devDependencies": {
-    "yaml": "2.9.1"
-  }
+  "license": "Apache-2.0"
 }
