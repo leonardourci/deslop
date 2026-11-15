@@ -79,6 +79,9 @@ test('configuration and unsupported switches fail before steps or reviews', t =>
   failed(f.call('run', '--only', 'tests'), 'USAGE');
   failed(f.call('run', '--skip', 'review'), 'USAGE');
   failed(f.call('run'), 'REVIEWER');
+  f.config.localRunCounts = false; f.configure(); f.commit();
+  failed(f.call('run', '--reviewer', 'fixture'), 'CONFIG');
+  f.config.localRunCounts = true;
   f.config.kinds[0].steps = ['missing']; f.configure(); f.commit();
   failed(f.call('run', '--reviewer', 'fixture'), 'CONFIG');
   f.config.kinds[0].steps = ['test']; f.config.kinds[0].skills = ['missing']; f.configure(); f.commit();

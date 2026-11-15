@@ -44,6 +44,7 @@ export function validateConfig({ config, root }) {
   requireConfig({ condition: config.maxLocalRuns === undefined && config.reviewer === undefined, message: 'reviewer and maxLocalRuns belong in machine settings' });
   requireConfig({ condition: ['local', 'ci'].includes(config.mode), message: 'mode must be local or ci' });
   requireConfig({ condition: config.localRunCounts === undefined || typeof config.localRunCounts === 'boolean', message: 'localRunCounts must be boolean' });
+  requireConfig({ condition: config.mode === 'ci' || config.localRunCounts !== false, message: 'localRunCounts: false requires CI mode' });
   requireConfig({ condition: config.decline === undefined || ['agent', 'owner'].includes(config.decline), message: 'decline must be agent or owner' });
   requireConfig({ condition: object(config.steps) && Object.values(config.steps).every(value => typeof value === 'string' && value.trim()), message: 'steps must map names to commands' });
   requireConfig({ condition: object(config.skills) && Object.values(config.skills).every(value => typeof value === 'string' && value.length > 0), message: 'skills must map names to files' });
