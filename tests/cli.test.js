@@ -29,7 +29,7 @@ test('checks cannot change configured hooks or enable an existing hook', t => {
   }
 });
 
-test('checks cannot change worktree-specific git config', t => {
+test('checks cannot create worktree-specific git config after it is enabled', t => {
   const f = fixture(t);
   f.git('config', 'extensions.worktreeConfig', 'true');
   f.config.commands.tests = 'git config --worktree core.fileMode false';
@@ -37,6 +37,14 @@ test('checks cannot change worktree-specific git config', t => {
   failed(f.call('run', '--reviewer', 'fixture'), 'CHECK_GIT');
   assert.deepEqual(f.runs()[0].commits, []);
   assert.equal(f.call('status').status, 1);
+});
+
+test('enabled worktree config without a file does not block review or proof', t => {
+  const f = fixture(t);
+  f.git('config', 'extensions.worktreeConfig', 'true');
+  passed(f.call('run', '--reviewer', 'fixture'));
+  assert.equal(f.runs()[0].checks[0].ok, true);
+  passed(f.call('status'));
 });
 
 test('status rejects malformed proof counts and null checks without crashing', t => {
