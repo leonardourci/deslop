@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { parse } from 'yaml';
+import picomatch from 'picomatch';
 import { checkStates, markerWorkflow, validMarker } from '../src/github.js';
 import { select } from '../src/config.js';
 import { runningAgent, reviewerChoices, modelChoice } from '../src/review.js';
@@ -56,4 +59,26 @@ test('reviewer and provider model precedence support hosted Codex, Claude, prefe
   assert.deepEqual(reviewerChoices({ override: 'custom', settings: { reviewer: 'claude' }, env: {} }), ['custom']);
   assert.throws(() => reviewerChoices({ settings: {}, env: {} }), /pass --reviewer/);
   assert.deepEqual(modelChoice({ provider: 'codex', config: { reviewerModels: { codex: { model: 'repo', effort: 'high' }, claude: { model: 'unrelated' } } }, settings: { reviewerModels: { codex: { model: 'machine' } } }, model: 'run' }), { model: 'run', effort: 'high' });
+});
+
+
+test('CI schedules required checks for repository policy and review skill changes', () => {
+  const config = JSON.parse(readFileSync(new URL('../verify.config.json', import.meta.url), 'utf8'));
+  const patterns = parse(readFileSync(new URL('../.github/workflows/tests.yml', import.meta.url), 'utf8')).on.pull_request.paths;
+  function scheduled(path) {
+    let included = false;
+    for (const pattern of patterns) {
+      const negative = pattern.startsWith('!');
+      if (picomatch(negative ? pattern.slice(1) : pattern, { dot: true })(path)) included = !negative;
+    }
+    return included;
+  }
+  const paths = ['verify.config.json', '.agents/skills/review/SKILL.md', 'scripts/hosted-smoke.js', 'README.md', 'docs/spec.md'];
+  assert.deepEqual(paths.map(path => ({ scheduled: scheduled(path), required: select({ config, paths: [path] }).checks.length > 0 })), [
+    { scheduled: true, required: true },
+    { scheduled: true, required: true },
+    { scheduled: true, required: true },
+    { scheduled: false, required: false },
+    { scheduled: false, required: false },
+  ]);
 });
