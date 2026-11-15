@@ -54,7 +54,7 @@ Only failing, errored or timed-out checks resume the same Codex or Claude sessio
 }
 ```
 
-`publishLocal` defaults to `false`. A kind may set `ciRequired: true` to require all of its named checks in CI, including under `--local` and when local publication is enabled. That kind needs at least one check. Local commands run first; if their final commit is not pushed, deslop ends red with a push-and-rerun hint and posts nothing to GitHub. `--local` never pushes.
+`publishLocal` defaults to `false`. A kind may set `ciRequired: true` to require all of its named checks in CI, including under `--local` and when local publication is enabled. That kind needs at least one check. Local commands run first; failures resume the agent with trimmed details before any required-CI wait. Required CI starts only after every local command passes; if their final commit is not pushed, deslop ends red with a push-and-rerun hint and posts nothing to GitHub. `--local` never pushes.
 
 Each changed path uses its first matching kind; the run unions commands, checks and instructions. Renames count both paths. Unmatched paths, missing instruction files and unknown commands stop the run. Built-in instructions cover code review, test audit and plain writing; `instructions` replaces named defaults with files, and kinds can choose an instruction list. An omitted list uses all built-in defaults.
 
