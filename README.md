@@ -37,7 +37,7 @@ verify run --reviewer codex --reviewer-model <gpt-model> --reviewer-effort high
 verify run --reviewer claude --reviewer-model <claude-model> --reviewer-effort high
 ```
 
-`--local` is the fallback when GitHub CI cannot run. It counts unless the repo refuses it with `localRunCounts: false`. The marker and status always identify it as **ran locally**. There are no `--only` or `--skip` options. A local repo cannot switch to CI for a single run.
+`--local` is the fallback when GitHub CI cannot run. It counts unless the repo refuses it with `localRunCounts: false`. The marker and status always identify it as **ran locally**. There are no `--only` or `--skip` options. A local repo cannot switch to CI for a single run. Refusing local runs with `localRunCounts: false` requires CI mode.
 
 `status` reads the PR marker and exits successfully only when it names the current pushed commit, has passed checks and a clean review, and satisfies the local-run policy. A new commit makes the marker stale, including documentation edits and commits with the same tree. Uncommitted changes also prevent status from reporting the checkout as current. The PR-body marker is an honesty record for one exact commit, not a signature or authenticated attestation.
 
