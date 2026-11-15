@@ -133,31 +133,7 @@ export async function waitForChecks({
   let lastError;
   while (Date.now() < deadline) {
     try {
-      const [runs, statuses] = await Promise.all([
-        github({
-          cwd,
-          args: [
-            'api',
-            '--paginate',
-            '--slurp',
-            `repos/${repo}/commits/${head}/check-runs?per_page=100`,
-          ],
-        }),
-        github({
-          cwd,
-          args: [
-            'api',
-            '--paginate',
-            '--slurp',
-            `repos/${repo}/commits/${head}/statuses?per_page=100`,
-          ],
-        }),
-      ]);
-      checks = checkStates({
-        runs: JSON.parse(runs).flatMap((page) => page.check_runs),
-        statuses: JSON.parse(statuses).flat(),
-        names,
-      });
+      checks = await readChecks({ cwd, head, names, repo });
       lastError = null;
       if (
         checks.some(
@@ -210,4 +186,33 @@ export async function commitStatus({ cwd, head, branch, state, description }) {
     ],
   });
   return true;
+}
+
+export async function readChecks({ cwd, head, names, repo }) {
+  repo ||= await repository({ cwd });
+  const [runs, statuses] = await Promise.all([
+    github({
+      cwd,
+      args: [
+        'api',
+        '--paginate',
+        '--slurp',
+        `repos/${repo}/commits/${head}/check-runs?per_page=100`,
+      ],
+    }),
+    github({
+      cwd,
+      args: [
+        'api',
+        '--paginate',
+        '--slurp',
+        `repos/${repo}/commits/${head}/statuses?per_page=100`,
+      ],
+    }),
+  ]);
+  return checkStates({
+    runs: JSON.parse(runs).flatMap((page) => page.check_runs),
+    statuses: JSON.parse(statuses).flat(),
+    names,
+  });
 }
