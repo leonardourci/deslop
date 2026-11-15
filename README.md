@@ -39,7 +39,7 @@ verify run --reviewer claude --reviewer-model <claude-model> --reviewer-effort h
 
 `--local` is the fallback when GitHub CI cannot run. It counts unless the repo refuses it with `localRunCounts: false`. The marker and status always identify it as **ran locally**. There are no `--only` or `--skip` options. A local repo cannot switch to CI for a single run.
 
-`status` reads the PR marker and exits successfully only when it names the current pushed commit, has passed checks and a clean review, and satisfies the local-run policy. A new commit makes the marker stale, including documentation edits and commits with the same tree.
+`status` reads the PR marker and exits successfully only when it names the current pushed commit, has passed checks and a clean review, and satisfies the local-run policy. A new commit makes the marker stale, including documentation edits and commits with the same tree. Uncommitted changes also prevent status from reporting the checkout as current. The PR-body marker is an honesty record for one exact commit, not a signature or authenticated attestation.
 
 ## Repository config
 
@@ -83,6 +83,10 @@ Each changed file uses its first matching kind. A change spanning kinds needs th
 
 Checks can be an array of exact GitHub check names or `"all"`. Empty arrays wait for nothing. `"all"` waits for every reported check except the `verify` marker check and CodeRabbit. Missing checks keep waiting; failures and skipped or neutral checks fail. A wait expires with instructions to resolve CI or run locally. The marker check is never a dependency of itself.
 
+## Binary files
+
+The reviewer receives binary-file metadata beside the text diff: path, extension-derived type, byte size, and whether the file was added, changed or removed. The marker and status label these as **binary files, not content-reviewed**. The reviewer can flag suspicious metadata; it does not inspect binary contents. Set `"binary": "fail"` in repo config to reject any binary change with an unsupported-evidence error instead. The default is `"binary": "metadata"`.
+
 ## Machine settings
 
 `$XDG_CONFIG_HOME/verify/settings.json` (normally `~/.config/verify/settings.json`):
@@ -106,7 +110,7 @@ Model and effort selection for each provider: CLI override, machine settings, re
 
 ## Findings and follow-up
 
-Every finding includes its ID, location, problem and suggested fix, without severities. Fix every finding, commit, push, and run again. Round two is a narrow check of the fixes and their regressions. Three rounds with findings stop verification. An owner can start a new full cycle by commenting `verify restart review: <reason>` on the PR. The same owner-login rules apply, and status records who restarted the review and why. Run state stays in the checkout's Git directory.
+Every finding includes its ID, location, problem and suggested fix, without severities. Fix every finding, commit, push, and run again. Round two checks the fixes, every newly introduced change, and their regressions. Three rounds with findings stop verification. An owner can start a new full cycle by commenting `verify restart review: <reason>` on the PR. The same owner-login rules apply, and status records who restarted the review and why. Run state stays in the checkout's Git directory.
 
 To decline an incorrect finding with a visible reason:
 
