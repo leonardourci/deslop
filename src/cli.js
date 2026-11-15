@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, writeFileSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { CONFIG_FILE, WORKFLOW_FILE, locations, loadConfig, loadSettings, readJson, validateConfig } from './config.js';
 import { git, VerifyError } from './process.js';
 import { markerFromBody, markerWorkflow, pullRequest, validMarker } from './github.js';
@@ -109,7 +109,8 @@ export async function main({ args = process.argv.slice(2), cwd = process.cwd(), 
   return 0;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+const entry = process.argv[1];
+if (entry && existsSync(entry) && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(entry)) {
   try { process.exitCode = await main(); }
   catch (error) { console.error(`error: ${error.message}\ncode: ${error.code || 'VERIFY'}`); process.exitCode = 1; }
 }

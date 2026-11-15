@@ -1,6 +1,8 @@
 import { test } from 'node:test';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { writeFileSync, readFileSync, rmSync, existsSync, mkdirSync, realpathSync } from 'node:fs';
+import { writeFileSync, readFileSync, rmSync, existsSync, mkdirSync, realpathSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixture } from './fixtures.js';
 
@@ -282,4 +284,16 @@ test('poisoned Git routing cannot redirect fixture writes into another repositor
   assert.equal(isolated.git('rev-parse', '--show-toplevel'), realpathSync(isolated.root));
   assert.equal(outside.git('rev-parse', 'HEAD'), before);
   passed(isolated.call('run', '--reviewer', 'fixture'));
+});
+
+
+test('the installed command runs through its executable symlink', t => {
+  const f = fixture(t);
+  const entry = join(f.home, 'bin', 'verify');
+  symlinkSync(fileURLToPath(new URL('../src/cli.js', import.meta.url)), entry);
+  const result = spawnSync(entry, ['--help'], { cwd: f.root, env: f.env, encoding: 'utf8' });
+  passed(result);
+  assert.match(result.stdout, /verify init/);
+  assert.match(result.stdout, /verify run/);
+  assert.match(result.stdout, /verify status/);
 });
