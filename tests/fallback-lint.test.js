@@ -43,6 +43,15 @@ test('fallback lint leaves files outside the review diff alone', (t) => {
   assert.equal(lintCheck(f).ok, true);
 });
 
+test('fallback lint treats glob characters in changed filenames literally', (t) => {
+  const f = lintFixture(t);
+  writeFileSync(join(f.root, '[page].js'), 'export const value = 1;');
+  f.configure();
+  f.commit();
+  pass(f.call('run', '--reviewer', 'fixture'));
+  assert.equal(lintCheck(f).ok, true);
+});
+
 for (const filename of ['eslint.config.mjs', 'package.json'])
   test(`the repo config in ${filename} replaces shipped rules`, (t) => {
     const f = lintFixture(t);
@@ -65,14 +74,16 @@ for (const filename of ['eslint.config.mjs', 'package.json'])
     assert.equal(lintCheck(f).ok, true);
   });
 
-for (const filename of ['eslint.config.mjs', '.eslintrc.json'])
+for (const filename of ['eslint.config.mjs', '.eslintrc.json', 'package.json'])
   test(`fallback lint enforces the repo rules in ${filename}`, (t) => {
     const f = lintFixture(t);
     writeFileSync(
       join(f.root, filename),
       filename.endsWith('mjs')
         ? "export default [{rules:{'no-console':'error'}}];"
-        : JSON.stringify({ rules: { 'no-console': 'error' } }),
+        : JSON.stringify(filename === 'package.json'
+          ? { eslintConfig: { rules: { 'no-console': 'error' } } }
+          : { rules: { 'no-console': 'error' } }),
     );
     writeFileSync(join(f.root, 'custom.js'), "console.log('demo');");
     f.configure();

@@ -97,10 +97,15 @@ for (const {
     options = {
       cwd: dirname(config.file),
       overrideConfigFile: true,
-      overrideConfig: compat.extends(config.file),
+      overrideConfig: config.file.endsWith('package.json')
+        ? compat.config(JSON.parse(readFileSync(config.file, 'utf8')).eslintConfig)
+        : compat.extends(config.file),
     };
   }
-  const eslint = new ESLint(options);
+  const eslint = new ESLint({
+    ...options,
+    globInputPaths: false,
+  });
   results.push(...(await eslint.lintFiles(scope)));
 }
 const formatter = await new ESLint({ overrideConfigFile: true }).loadFormatter(
