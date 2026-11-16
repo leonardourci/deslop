@@ -43,6 +43,7 @@ const config = [
     languageOptions: { parser: ts.parser },
     plugins: { '@typescript-eslint': ts.plugin },
     rules: {
+      ...ts.configs.eslintRecommended.rules,
       'no-undef': 'off',
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': 'error',

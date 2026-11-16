@@ -116,3 +116,8 @@ test('the project type checker rejects a JavaScript type error', (t) => {
   assert.notEqual(result.status, 0);
   assert.match(result.stdout, /TS2339.*toUpperCase/);
 });
+
+test('valid TypeScript overloads pass fallback lint', async () => {
+  const [result] = await eslint.lintText('export function value(x: string): string;\nexport function value(x: number): number;\nexport function value(x: string | number) { return x; }', { filePath: 'overload.ts' });
+  assert.equal(result.errorCount, 0, JSON.stringify(result.messages));
+});
