@@ -38,12 +38,19 @@ export async function execute({
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     let timedOut = false;
+    let stoppedBy;
     let escalation;
     let terminated = Promise.resolve();
     const kill = (signal) => {
       if (process.platform === 'win32') {
-        const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+        const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+          stdio: 'ignore',
+          timeout: KILL_GRACE_MS
+        });
         killer.on('error', () => child.kill(signal));
+        killer.on('exit', (code) => {
+          if (code !== 0) child.kill(signal);
+        });
       }
       else {
         try {
@@ -53,18 +60,41 @@ export async function execute({
         }
       }
     };
-    const timer = setTimeout(() => {
-      timedOut = true;
+    const terminate = (reason) => {
+      if (stoppedBy) return;
+      stoppedBy = reason;
+      timedOut = reason === 'timeout';
+      clearTimeout(timer);
       kill('SIGTERM');
       terminated = new Promise((resolve) => {
         escalation = setTimeout(() => {
           kill('SIGKILL');
+          child.stdin.destroy();
           child.stdout.destroy();
           child.stderr.destroy();
+          child.unref();
           resolve();
+          cleanup();
+          fail(child.exitCode, child.signalCode);
         }, KILL_GRACE_MS);
       });
-    }, timeoutMs);
+    };
+    const timer = setTimeout(() => terminate('timeout'), timeoutMs);
+    const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+    const handlers = signals.map(signal => ({
+      signal,
+      handler: () => terminate(signal)
+    }));
+    for (const {
+      signal,
+      handler
+    } of handlers) process.on(signal, handler);
+    const cleanup = () => {
+      for (const {
+        signal,
+        handler
+      } of handlers) process.removeListener(signal, handler);
+    };
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (chunk) => {
@@ -82,20 +112,25 @@ export async function execute({
     child.on('error', (error) => {
       clearTimeout(timer);
       clearTimeout(escalation);
+      cleanup();
       reject(error);
     });
+    const fail = (status, signal) => {
+      const error = new DeslopError(
+        timedOut ? timeoutCode : stoppedBy ? 'COMMAND_INTERRUPTED' : 'COMMAND',
+        `${command} ${timedOut ? 'timed out' : stoppedBy ? `interrupted (${stoppedBy})` : `failed (${signal || status})`}: ${(stderr || stdout).trim().slice(-4000)}`,
+      );
+      error.stdout = stdout;
+      error.stderr = stderr;
+      error.status = status;
+      reject(error);
+    };
     child.on('close', async (status, signal) => {
       clearTimeout(timer);
       await terminated;
-      if (status !== 0 || timedOut) {
-        const error = new DeslopError(
-          timedOut ? timeoutCode : 'COMMAND',
-          `${command} ${timedOut ? 'timed out' : `failed (${signal || status})`}: ${(stderr || stdout).trim().slice(-4000)}`,
-        );
-        error.stdout = stdout;
-        error.stderr = stderr;
-        error.status = status;
-        reject(error);
+      cleanup();
+      if (status !== 0 || stoppedBy) {
+        fail(status, signal);
         return;
       }
       resolve(stdout.trimEnd());
