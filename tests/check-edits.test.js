@@ -132,3 +132,17 @@ test('commands that enable required CI cannot receive stale local proof', (t) =>
   assert.match(r.stderr, /CI_REQUIRED/);
   assert.equal(f.call('status').status, 1);
 });
+
+
+test('a command cannot keep proof after replacing a selected command with a failing definition', (t) => {
+  const f = fixture(t);
+  f.config.commands.configure = `node -e "const fs=require('node:fs');const c=JSON.parse(fs.readFileSync('deslop.config.json'));c.commands.tests='node -e \\"process.exit(1)\\"';fs.writeFileSync('deslop.config.json',JSON.stringify(c))"`;
+  f.config.kinds[0].commands = ['configure', 'tests'];
+  f.config.checkFixAttempts = 0;
+  f.configure();
+  f.commit();
+  const result = f.call('run', '--local', '--reviewer', 'fixture');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.ok(f.runs()[0].checks.some(check => check.name === 'tests' && !check.ok));
+  assert.equal(f.call('status').status, 1);
+});
