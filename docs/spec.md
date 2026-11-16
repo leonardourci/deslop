@@ -48,9 +48,7 @@ Deslop's own source remains JavaScript. ESLint runs its recommended rules plus h
 
 For reviewed repos, lint precedence is:
 
-1. The selected repo commands/CI run their own lint. Deslop does not add another lint pass when a selected command name, shell command or active CI check name identifies `lint` or `eslint`.
-An optional CI lint check does not suppress fallback lint under `--local`, because it will not run. Required CI checks still count.
-
+1. The repo commands/CI active in this run take precedence. Deslop does not add another lint pass when an active command name, shell command or CI check name identifies `lint` or `eslint`. An optional CI lint check does not suppress fallback lint under `--local`, because it will not run. A local lint command skipped for CI also does not suppress the fallback.
 2. Otherwise deslop runs its fallback ESLint on existing regular JS/TS files in the change scope, including new files created during the run. It does not lint unrelated files or deleted paths. For each file, the nearest repo ESLint config wins (flat config or legacy eslintrc/package config); with none, deslop's shipped recommended/house config applies. A broken repo config fails the check rather than silently using the default.
 3. `fallbackLint: false` disables the fallback, including when a wrapper command or CI job already lints without naming it. It does not disable the repo's selected commands or CI.
 

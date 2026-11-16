@@ -43,37 +43,36 @@ test('fallback lint leaves files outside the review diff alone', (t) => {
   assert.equal(lintCheck(f).ok, true);
 });
 
-test('a repo ESLint config replaces the shipped rules', (t) => {
-  const f = lintFixture(t);
-  writeFileSync(
-    join(f.root, 'eslint.config.mjs'),
-    "export default [{rules:{'no-unused-vars':'off'}}];",
-  );
-  writeFileSync(
-    join(f.root, 'custom.js'),
-    'export const pair = {left:1,right:2}; const unused=1;',
-  );
-  f.configure();
-  f.commit();
-  pass(f.call('run', '--reviewer', 'fixture'));
-  assert.equal(lintCheck(f).ok, true);
-});
+for (const filename of ['eslint.config.mjs', 'package.json'])
+  test(`the repo config in ${filename} replaces shipped rules`, (t) => {
+    const f = lintFixture(t);
+    writeFileSync(
+      join(f.root, filename),
+      filename.endsWith('mjs')
+        ? "export default [{rules:{'no-unused-vars':'off'}}];"
+        : JSON.stringify({
+          name: 'fixture',
+          eslintConfig: { rules: { 'no-unused-vars': 'off' } }
+        }),
+    );
+    writeFileSync(
+      join(f.root, 'custom.js'),
+      'export const pair = {left:1,right:2}; const unused=1;',
+    );
+    f.configure();
+    f.commit();
+    pass(f.call('run', '--reviewer', 'fixture'));
+    assert.equal(lintCheck(f).ok, true);
+  });
 
-for (const filename of ['eslint.config.mjs', '.eslintrc.json', 'package.json'])
+for (const filename of ['eslint.config.mjs', '.eslintrc.json'])
   test(`fallback lint enforces the repo rules in ${filename}`, (t) => {
     const f = lintFixture(t);
     writeFileSync(
       join(f.root, filename),
       filename.endsWith('mjs')
         ? "export default [{rules:{'no-console':'error'}}];"
-        : JSON.stringify(
-            filename === 'package.json'
-              ? {
-                  name: 'fixture',
-                  eslintConfig: { rules: { 'no-console': 'error' } },
-                }
-              : { rules: { 'no-console': 'error' } },
-          ),
+        : JSON.stringify({ rules: { 'no-console': 'error' } }),
     );
     writeFileSync(join(f.root, 'custom.js'), "console.log('demo');");
     f.configure();
