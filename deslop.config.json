@@ -1,5 +1,7 @@
 {
   "commands": {
+    "lint": "npm run lint:fix",
+    "typecheck": "npm run typecheck",
     "tests": "npm test"
   },
   "kinds": [
@@ -12,7 +14,7 @@
       "commands": [],
       "checks": [],
       "instructions": [
-        "writing"
+        "kill-ai-slop"
       ]
     },
     {
@@ -21,6 +23,8 @@
         "**"
       ],
       "commands": [
+        "lint",
+        "typecheck",
         "tests"
       ],
       "checks": [
@@ -29,8 +33,5 @@
       ]
     }
   ],
-  "checkFixAttempts": 1,
-  "instructions": {
-    "code": ".agents/skills/review/SKILL.md"
-  }
+  "checkFixAttempts": 1
 }
