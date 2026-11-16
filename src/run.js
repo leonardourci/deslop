@@ -302,11 +302,6 @@ async function performRun({
       turn: 0,
       base: info.base,
     });
-    await commitEdits({
-      cwd,
-      message: 'deslop: fix review findings',
-      data,
-    });
     if (data.review.items.some((item) => !item.fixed)) {
       await invalidateVerdict({
         head: await git({
@@ -314,8 +309,18 @@ async function performRun({
           args: ['rev-parse', 'HEAD'],
         }),
       });
+    await commitEdits({
+      cwd,
+      message: 'deslop: fix review findings',
+      data,
+    });
       throw new DeslopError('UNFIXED', 'Agent left review findings unfixed');
     }
+    await commitEdits({
+      cwd,
+      message: 'deslop: fix review findings',
+      data,
+    });
     config = loadConfig({ places });
     let fixes = 0,
       checkedHead,
@@ -405,12 +410,15 @@ async function performRun({
           ...new Set([...(data.unstableCommands || []), ...editedCommands]),
         ];
       }
+      const checkedConfig = config;
+      config = loadConfig({ places });
       const expandedSelection = select({
         config,
         paths: [...requiredPaths],
         hasTests,
       });
       if (
+        currentSelection.commands.some((name) => checkedConfig.commands?.[name] !== config.commands?.[name]) ||
         ['commands', 'checks', 'requiredChecks'].some((key) =>
           expandedSelection[key].some(
             (name) => !currentSelection[key].includes(name),

@@ -119,3 +119,16 @@ for (const verdict of ['always-green', 'proof-red', 'proof-green'])
     assert.match(r.stdout, /unstable commands: node churn.cjs/);
     assert.equal(f.call('status').status, verdict === 'proof-red' ? 1 : 0);
   });
+
+
+test('commands that enable required CI cannot receive stale local proof', (t) => {
+  const f = fixture(t);
+  f.config.commands.configure = `node -e "const fs=require('node:fs');const c=JSON.parse(fs.readFileSync('deslop.config.json'));c.kinds[0].ciRequired=true;fs.writeFileSync('deslop.config.json',JSON.stringify(c))"`;
+  f.config.kinds[0].commands = ['configure', 'tests'];
+  f.configure();
+  f.commit();
+  const r = f.call('run', '--local', '--reviewer', 'fixture');
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stderr, /CI_REQUIRED/);
+  assert.equal(f.call('status').status, 1);
+});
