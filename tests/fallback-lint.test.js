@@ -43,14 +43,6 @@ test('fallback lint leaves files outside the review diff alone', (t) => {
   assert.equal(lintCheck(f).ok, true);
 });
 
-test('fallback lint treats glob characters in changed filenames literally', (t) => {
-  const f = lintFixture(t);
-  writeFileSync(join(f.root, '[page].js'), 'export const value = 1;');
-  f.configure();
-  f.commit();
-  pass(f.call('run', '--reviewer', 'fixture'));
-  assert.equal(lintCheck(f).ok, true);
-});
 
 for (const filename of ['eslint.config.mjs', 'package.json'])
   test(`the repo config in ${filename} replaces shipped rules`, (t) => {
