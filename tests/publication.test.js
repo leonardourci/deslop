@@ -97,6 +97,24 @@ test('ciRequired local fixes stay local and publish nothing until pushed', (t) =
   assert.equal(f.call('status').status, 1);
 });
 
+test('pushed ciRequired runs repair local failures before waiting for CI', (t) => {
+  const f = fixture(t);
+  f.config.kinds[0].ciRequired = true;
+  f.configure();
+  writeFileSync(join(f.root, 'work.txt'), 'bad');
+  f.commit();
+  f.push();
+  const state = f.load();
+  state.actions = [{}, { edit: 'good' }];
+  f.save(state);
+  pass(f.call('run', '--reviewer', 'fixture'));
+  assert.match(f.load().calls[1].prompt, /FAIL work/);
+  assert.deepEqual(
+    f.runs()[0].checks.map((check) => [check.name, check.ok]),
+    [['tests', false], ['tests', true], ['Tests', true]],
+  );
+});
+
 test('only ciRequired kinds are checked alongside local commands', (t) => {
   const f = fixture(t);
   writeFileSync(join(f.root, 'optional.txt'), 'optional');

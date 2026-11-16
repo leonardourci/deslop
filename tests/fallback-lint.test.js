@@ -148,6 +148,17 @@ test('fallback lint failures reach repair before CI waiting', (t) => {
   );
 });
 
+test('optional lint CI does not suppress fallback lint under --local', (t) => {
+  const f = lintFixture(t);
+  f.config.kinds[0].checks = ['Lint'];
+  writeFileSync(join(f.root, 'bad.js'), 'const unused=1;');
+  f.configure();
+  f.commit();
+  const result = f.call('run', '--local', '--reviewer', 'fixture');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(lintCheck(f).ok, false);
+});
+
 test('a fallback lint failure resumes the same agent for a code fix', (t) => {
   const f = lintFixture(t);
   f.config.checkFixAttempts = 1;

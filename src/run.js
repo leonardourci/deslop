@@ -358,9 +358,15 @@ async function performRun({
           cwd,
           dir,
           config,
-          selection: currentSelection,
+          selection: {
+            ...currentSelection,
+            checks: ci ? currentSelection.checks : currentSelection.requiredChecks,
+          },
           ci: false,
-          localCommands: ci ? [] : currentSelection.commands,
+          localCommands:
+            ci && !currentSelection.requiredChecks.length
+              ? []
+              : currentSelection.commands,
           paths: requiredPaths,
           head,
           attempt: data.checks.length,
