@@ -1,0 +1,68 @@
+# Deslop contract
+
+The supported environment is macOS and Linux with github.com.
+
+Deslop works on commits, without requiring a push or pull request. A dirty checkout stops with one line: `commit or stash your changes first`. It refuses the default branch. There is one flow, with fixing as its only behavior.
+
+1. A fresh non-interactive agent reviews the branch diff without check results and edits files to fix findings. Only deslop can stage, commit, push or write markers. The agent's tools deny git operations; deslop also rejects unexpected git-state changes. Edits become `deslop: fix review findings` commits as the configured user, with no attribution footer.
+2. Deslop runs the selected commands locally. When the original commit is already pushed and selected kinds require CI, it pushes only its own fix commits to that same branch and waits for the named checks on that exact commit. `--local` forces local commands and keeps fix commits local. A kind with `ciRequired: true` runs local commands even for a pushed run, then its named CI checks on the final exact head only after every local command passes. Local failures resume the agent with trimmed failures before any required-CI wait. An unpushed required-CI head ends red with a push/rerun hint and posts nothing to GitHub. Missing CI never counts as passed. Checks and statuses with the same name must both pass. GitHub identity comes from origin, including when gh has another default repository. Fix pushes require the observed remote SHA to remain unchanged and advance it only to a descendant.
+3. Failed checks return trimmed failure details to the same agent session, resumed by id. Deslop commits edits as `deslop: fix failing checks` and reruns checks. `checkFixAttempts` defaults to 1; 0 returns failures without another agent call. Exhausting attempts leaves no marker. A custom command without resume support receives a fresh call describing prior changes.
+4. Success adds a git note under `refs/notes/deslop` to the final commit. A GitHub status named `deslop` requires that final commit to be pushed. Local publication defaults off (`publishLocal: false`); `status --publish` verifies green CI on the exact commit. `publishLocal: true` permits successful local checks to publish, but never bypasses a ciRequired kind. Markers never describe another commit. Deslop never merges or pushes to the default branch.
+
+Commands: `deslop run` (also bare `deslop`), `deslop init`, `deslop status`, `deslop shape`. Base selection is explicit `--base`, then an open PR's base branch, then origin's default branch, then local main/master. PR lookup is optional; local repositories work without GitHub.
+
+Configuration contains commands, change kinds with command/check/instruction selection, instruction-file overrides, checkFixAttempts, custom provider commands and per-provider model/effort. Configuration lives in the repository; machine settings contain only agent preferences. The first matching kind applies per changed path; requirements are unioned across paths, including both sides of renames. Agent selection uses CLI override, then machine preference/list, then the detected caller. Model and effort use CLI override for the primary provider, then machine, then repo, then provider default. Fallback providers use their own settings.
+
+Each run writes git-ignored `.deslop/runs/<id>/run.json`. It contains verdict, checks with name/ok/log/failures, review with found/fixed/items, and commits. Each failure has test, message and an excerpt of at most 20 lines; full output stays in separate log files. The short terminal summary lists checks, findings/fixes, commits, run.json, `deslop shape`, and warns that full logs can be large. Shape prints a small example and identifies fields that may be long.
+
+A rerun preserves proof until a red review or check verdict; then it removes the current note and attempts to publish failure together. It never posts a pending status. GitHub publication outages retain a successful local note, with a retry hint. Poll errors retry within the bounded CI wait; missing and non-code final states end red without a repair call. Only failure, error and timed_out are fixable. A repair with no edits ends red without repeating checks.
+
+Neither provider loads AGENTS.md or CLAUDE.md implicitly. Repositories may select either explicitly through instruction overrides. Claude cannot read `.deslop` logs. Prompts cap additional changed-file content per file and in total. Command and agent processes have bounded timeouts and terminate their process groups (the child tree on Windows) on timeout. Inherited output pipes cannot keep timeout completion waiting. Catchable interruption signals terminate active child groups before run ownership is released. Uncatchable process death can bypass cleanup; stale PID-lock recovery proves the owner died, not that every orphaned descendant exited.
+
+`init --command name="command" --check "check name"` accepts repeated values; `init --config file` imports a configuration. Missing required values prompt on a terminal and error with the flag otherwise. There is no machine-stored repository config.
+
+After the initial review and completed command sequences, deslop reloads repo configuration before selecting checks for proof. Check-fix turns may not edit config or configured instructions. Such edits end red and remain uncommitted. Workflow edits appear in the summary. Check-fix findings are recorded separately from the initial review. Failures report uncommitted paths in `left`.
+
+Run deslop only on repositories you trust. Verification executes the repository's configured commands, executable ESLint configuration and tooling as your user, just like running its test suite. Editor permissions do not sandbox verification or edited execution policy.
+
+Each checkout admits one writer through an atomically published, populated owner directory. Stale recovery reports and removes only provably dead owner names; legacy PID-file locks stop with a migration hint because older writers cannot be excluded atomically; removing an empty directory cannot delete a populated replacement.
+
+The git-state guard covers this checkout’s HEAD, branch, staged index, the current branch configuration, origin remote, user, commit/signing settings and hooks. Enabled worktree configuration is also guarded. Other worktrees may commit to their own branches during a run. Provider tool restrictions still deny git operations; unrelated shared refs do not invalidate this checkout.
+
+Tracked instruction prose in the reviewed diff receives file-level write grants, including protected agent-instruction directories. Existing untracked and ignored paths stay excluded; other instruction files remain read-only. Git metadata and git commands stay denied. New normal source/test files are allowed, committed by deslop, and listed in run.json's newFiles array. Codex uses a scoped permission profile; Claude uses native Edit permission rules. A post-edit scope check refuses instruction changes outside the reviewed diff.
+
+Local checks run in order on the evolving tree. After each command, deslop commits all of its nonignored edits as `deslop: <command>`; each command has its own commit. When any command changes files, deslop runs the sequence once more as the proof pass. That pass decides the verdict by exit codes and commits its own edits the same way. Commands that still edit files in the proof pass are named as unstable in the summary. Deslop never loops until files stop changing or refuses command edits. There is no configuration option for this behavior.
+
+
+## Review skills
+
+Deslop ships three independent default skills in `skills/`:
+
+- `review-code` checks correctness and bugs in changed code.
+- `kill-ai-slop` removes em dashes, AI-sounding filler and obvious/narrating comments, keeping comments only for non-obvious constraints. It removes dead code and one-caller wrappers, flattens needless nesting, prefers reuse and one place per rule, and keeps commit and PR text plain for a cold reader. For docs/prose it applies the writing rules.
+- `audit-tests` checks the quality of existing tests and coverage of the key behaviors in the diff. It flags missing coverage only for a real behavior a user or caller depends on: a meaningful new branch, failure path or boundary. It prefers deleting unnecessary tests and folding overlapping tests over adding more, adds only focused behavioral coverage, and does not chase coverage numbers, test trivial/framework code or demand evidence the tool cannot produce.
+
+Selection uses the first matching kind for each changed path. A code kind selects `review-code` and `kill-ai-slop`. Test paths (test/spec filenames and test directories) or an existing repository test suite add `audit-tests` to code review. Existing tests are detected from tracked conventional test filenames/directories, tracked paths selected by a `test`/`tests` kind, or a configured command named `test` or `tests`. Detection also covers non-JavaScript test suites. A docs/prose kind or a prose extension selects only `kill-ai-slop`. An explicit kind `instructions` list replaces this selection. Skills selected by different paths are unioned. The review prompt follows only those instructions; it does not impose a disabled concern through a separate built-in checklist. Legacy names `code`, `tests` and `writing` alias the corresponding shipped skills.
+
+Instruction precedence is per skill: local override > per-repo instructions file > shipped default. In `deslop.config.json`, `instructions` maps skill names to file paths relative to the repository, or `false` to disable that skill. Each default is independently replaceable or disable-able. For example, `{"instructions":{"review-code":"AGENTS.md","audit-tests":false}}` replaces correctness instructions and disables the test audit, keeping the cleanup default.
+
+For uncommitted machine preferences, `DESLOP_INSTRUCTIONS` points to a JSON map with the same per-skill path-or-false values. Paths are relative to that JSON file's directory. Each entry wins over both repo settings and defaults; omitted entries retain their lower-precedence values. This supports swapping or tweaking any one skill without modifying repo files. Invalid or missing instruction files stop the run. Neither AGENTS.md nor CLAUDE.md is loaded implicitly; Codex sets `project_doc_max_bytes=0`.
+
+## Lint and type checking
+
+Deslop's own source remains JavaScript. ESLint runs its recommended rules plus house rules: an object literal, destructuring pattern, type literal or interface with two or more entries puts each entry on its own line; unused variables/imports and em dashes in strings/comments are errors. `npm run lint` checks them and `npm run lint:fix` fixes layout. `npm run typecheck` runs `tsc --noEmit` with `checkJs` over source, shipped lint code and tests, using JSDoc where needed. Deslop's config and both Node CI jobs run lint, type checking and tests.
+
+For reviewed repos, lint precedence is:
+
+1. The repo commands/CI active in this run take precedence. Deslop does not add another lint pass when an active command name, shell command or CI check name identifies `lint` or `eslint`. An optional CI lint check does not suppress fallback lint under `--local`, because it will not run. A local lint command skipped for CI also does not suppress the fallback.
+2. Otherwise deslop runs its fallback ESLint on existing regular JS/TS files in the change scope, including new files created during the run. It does not lint unrelated files, deleted paths or files reached through symlinks. For each file, the nearest repo ESLint config wins (flat config or legacy eslintrc/package config); with none, deslop's shipped recommended/house config applies. A broken repo config fails the check rather than silently using the default.
+3. `fallbackLint: false` disables the fallback, including when a wrapper command or CI job already lints without naming it. It does not disable the repo's selected commands or CI.
+
+The fallback runs locally even for CI-backed reviews, before waiting for CI, and feeds failures through the same bounded agent repair flow. Repository lint commands retain their configured scope. The fallback does not apply fixes itself; the reviewer makes necessary edits. No repository lint config is written or replaced.
+
+## Challenger review
+
+CodeRabbit reviews are requested by Hydra after the owner enables the app. Automatic and automatic
+incremental reviews are disabled. The assertive challenger checks bugs, tests and simpler code,
+using the three shipped skills and the repository contributor review skill. It excludes
+`package-lock.json`, keeps poems off and flags workflow changes, including unsafe privileged triggers.
