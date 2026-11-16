@@ -99,3 +99,6 @@ Local checks run in order on the evolving tree. After each command, deslop commi
 ## Developing deslop
 
 Run `npm ci`, `npm run lint`, `npm run typecheck` and `npm test`. `npm run lint:fix` applies safe layout fixes. TypeScript checks the JavaScript through `checkJs`; source stays JavaScript. The configured deslop commands and CI run lint, type checking and tests on Node 22.13 and 24.
+
+Contributor reviews follow [the repository skill](.agents/skills/review/SKILL.md) and the three
+shipped skills. CodeRabbit is an on-demand challenger requested by Hydra; automatic reviews are off.

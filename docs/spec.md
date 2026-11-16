@@ -53,3 +53,10 @@ For reviewed repos, lint precedence is:
 3. `fallbackLint: false` disables the fallback, including when a wrapper command or CI job already lints without naming it. It does not disable the repo's selected commands or CI.
 
 The fallback runs locally even for CI-backed reviews, before waiting for CI, and feeds failures through the same bounded agent repair flow. Repository lint commands retain their configured scope. The fallback does not apply fixes itself; the reviewer makes necessary edits. No repository lint config is written or replaced.
+
+## Challenger review
+
+CodeRabbit reviews are requested by Hydra after the owner enables the app. Automatic and automatic
+incremental reviews are disabled. The assertive challenger checks bugs, tests and simpler code,
+using the three shipped skills and the repository contributor review skill. It excludes
+`package-lock.json`, keeps poems off and flags workflow changes, including unsafe privileged triggers.
