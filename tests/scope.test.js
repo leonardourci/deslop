@@ -54,3 +54,19 @@ test('only tracked instruction files in the diff gain write access and git stays
     claude.deny.includes(`Write(/${join(f.root, '.agents/untracked.md')})`),
   );
 });
+
+test('excluded filenames are literal Claude read denies', async (t) => {
+  const f = fixture(t);
+  writeFileSync(join(f.root, 'private[prod]*?.json'), 'secret');
+  const scope = await reviewScope({
+    cwd: f.root,
+    base: 'main',
+    config: f.config
+  });
+  const rules = claudeEdits({
+    cwd: f.root,
+    common: join(f.root, '.git'),
+    scope
+  });
+  assert.ok(rules.deny.includes(`Read(/${f.root}/private\\[prod\\]\\*\\?.json)`));
+});

@@ -166,19 +166,22 @@ export function claudeEdits({
       (path) => !scope.instructionFiles.includes(path),
     ),
   ]);
+  const literalPath = (path) => absolute(path).replace(/[\\*?[\]]/g, '\\$&');
   const deny = ['Bash', 'Agent'];
   for (const path of denied)
     deny.push(
-      `Edit(${absolute(path)})`,
-      `Edit(${absolute(path).replace(/\/$/, '')}/**)`,
-      `Write(${absolute(path)})`,
-      `Write(${absolute(path).replace(/\/$/, '')}/**)`,
+      `Edit(${literalPath(path)})`,
+      `Edit(${literalPath(path).replace(/\/$/, '')}/**)`,
+      `Write(${literalPath(path)})`,
+      `Write(${literalPath(path).replace(/\/$/, '')}/**)`,
     );
-  for (const path of scope.excluded)
+  for (const path of scope.excluded) {
+    const literal = literalPath(path);
     deny.push(
-      `Read(${absolute(path)})`,
-      `Read(${absolute(path).replace(/\/$/, '')}/**)`,
+      `Read(${literal})`,
+      `Read(${literal.replace(/\/$/, '')}/**)`,
     );
+  }
   return {
     allow,
     deny,
