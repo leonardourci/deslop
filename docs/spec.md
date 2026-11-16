@@ -1,5 +1,7 @@
 # Deslop contract
 
+The supported environment is macOS and Linux with github.com.
+
 Deslop works on commits, without requiring a push or pull request. A dirty checkout stops with one line: `commit or stash your changes first`. It refuses the default branch. There is one flow, with fixing as its only behavior.
 
 1. A fresh non-interactive agent reviews the branch diff without check results and edits files to fix findings. Only deslop can stage, commit, push or write markers. The agent's tools deny git operations; deslop also rejects unexpected git-state changes. Edits become `deslop: fix review findings` commits as the configured user, with no attribution footer.
@@ -15,13 +17,15 @@ Each run writes git-ignored `.deslop/runs/<id>/run.json`. It contains verdict, c
 
 A rerun preserves proof until a red review or check verdict; then it removes the current note and attempts to publish failure together. It never posts a pending status. GitHub publication outages retain a successful local note, with a retry hint. Poll errors retry within the bounded CI wait; missing and non-code final states end red without a repair call. Only failure, error and timed_out are fixable. A repair with no edits ends red without repeating checks.
 
-Neither provider loads AGENTS.md or CLAUDE.md implicitly. Repositories may select either explicitly through instruction overrides. Claude cannot read `.deslop` logs. Prompts cap additional changed-file content per file and in total. Command and agent processes have bounded timeouts and terminate their process groups (the child tree on Windows) on timeout. Inherited output pipes cannot keep timeout completion waiting.
+Neither provider loads AGENTS.md or CLAUDE.md implicitly. Repositories may select either explicitly through instruction overrides. Claude cannot read `.deslop` logs. Prompts cap additional changed-file content per file and in total. Command and agent processes have bounded timeouts and terminate their process groups (the child tree on Windows) on timeout. Inherited output pipes cannot keep timeout completion waiting. Catchable interruption signals terminate active child groups before run ownership is released. Uncatchable process death can bypass cleanup; stale PID-lock recovery proves the owner died, not that every orphaned descendant exited.
 
 `init --command name="command" --check "check name"` accepts repeated values; `init --config file` imports a configuration. Missing required values prompt on a terminal and error with the flag otherwise. There is no machine-stored repository config.
 
 After the initial review and completed command sequences, deslop reloads repo configuration before selecting checks for proof. Check-fix turns may not edit config or configured instructions. Such edits end red and remain uncommitted. Workflow edits appear in the summary. Check-fix findings are recorded separately from the initial review. Failures report uncommitted paths in `left`.
 
-Each checkout admits one writer through an atomically published, populated owner directory. Stale recovery removes only dead owner names; removing an empty directory cannot delete a populated replacement.
+Run deslop only on repositories you trust. Verification executes the repository's configured commands, executable ESLint configuration and tooling as your user, just like running its test suite. Editor permissions do not sandbox verification or edited execution policy.
+
+Each checkout admits one writer through an atomically published, populated owner directory. Stale recovery reports and removes only provably dead owner names; legacy PID-file locks stop with a migration hint because older writers cannot be excluded atomically; removing an empty directory cannot delete a populated replacement.
 
 The git-state guard covers this checkout’s HEAD, branch, staged index, the current branch configuration, origin remote, user, commit/signing settings and hooks. Enabled worktree configuration is also guarded. Other worktrees may commit to their own branches during a run. Provider tool restrictions still deny git operations; unrelated shared refs do not invalidate this checkout.
 

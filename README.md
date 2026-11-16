@@ -102,3 +102,14 @@ Run `npm ci`, `npm run lint`, `npm run typecheck` and `npm test`. `npm run lint:
 
 Contributor reviews follow [the repository skill](.agents/skills/review/SKILL.md) and the three
 shipped skills. CodeRabbit is an on-demand challenger requested by Hydra; automatic reviews are off.
+
+## Supported environment
+
+Deslop supports macOS and Linux with github.com. Windows and GitHub Enterprise are outside the
+supported environment.
+
+## Security
+
+Run deslop only on repositories you trust. It executes the repository's configured commands, ESLint
+configuration and tooling with your user account, just like running that repository's test suite.
+The editor's tool restrictions do not sandbox verification commands or edited execution policy.
