@@ -283,3 +283,21 @@ test('CI and publication use origin instead of an inherited gh default', (t) => 
   assert.ok(calls.some(args => args.includes('repos/example/project/statuses/' + f.git('rev-parse', 'HEAD'))));
   assert.ok(calls.filter(args => args[0] === 'repo').every(args => args[2] === s.origin));
 });
+
+for (const state of ['failure', 'pending'])
+  test(`same-name status ${state} blocks publication despite a successful check run`, (t) => {
+    const f = fixture(t);
+    f.push();
+    pass(f.call('run', '--local', '--reviewer', 'fixture'));
+    const s = f.load();
+    s.statuses = [{
+      id: 1,
+      context: 'Tests',
+      state
+    }];
+    f.save(s);
+    const result = f.call('status', '--publish');
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /CI not green/);
+    assert.equal(successes(f).length, 0);
+  });
