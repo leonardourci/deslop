@@ -108,7 +108,9 @@ test('pushed ciRequired runs repair local failures before waiting for CI', (t) =
   state.actions = [{}, { edit: 'good' }];
   f.save(state);
   pass(f.call('run', '--reviewer', 'fixture'));
-  assert.match(f.load().calls[1].prompt, /FAIL work/);
+  const calls = f.load().calls;
+  assert.equal(calls.length, 2);
+  assert.match(calls[1].prompt, /FAIL work/);
   assert.deepEqual(
     f.runs()[0].checks.map((check) => [check.name, check.ok]),
     [['tests', false], ['tests', true], ['Tests', true]],
