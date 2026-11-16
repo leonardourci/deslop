@@ -15,7 +15,12 @@ import { fileURLToPath } from 'node:url';
 const cli = fileURLToPath(new URL('../src/cli.js', import.meta.url));
 export function fixture(t) {
   const home = mkdtempSync(join(tmpdir(), 'deslop-test-'));
-  t.after(() => rmSync(home, { recursive: true, force: true }));
+  t.after(() =>
+    rmSync(home, {
+      recursive: true,
+      force: true,
+    }),
+  );
   const root = join(home, 'repo'),
     bin = join(home, 'bin'),
     stateFile = join(home, 'state.json');
@@ -40,7 +45,13 @@ export function fixture(t) {
   };
   if (process.env.SystemRoot) env.SystemRoot = process.env.SystemRoot;
   const save = (value) =>
-    writeFileSync(stateFile, JSON.stringify({ ...value, github: [] }));
+    writeFileSync(
+      stateFile,
+      JSON.stringify({
+        ...value,
+        github: [],
+      }),
+    );
   const load = () => ({
     ...JSON.parse(readFileSync(stateFile, 'utf8')),
     github: readdirSync(home)
@@ -90,13 +101,25 @@ else {console.error('unexpected gh args');process.exit(2)}
     calls: [],
     github: [],
     checks: [
-      { id: 1, name: 'Tests', status: 'completed', conclusion: 'success' },
+      {
+        id: 1,
+        name: 'Tests',
+        status: 'completed',
+        conclusion: 'success',
+      },
     ],
   });
+  /** @type {import('../src/types.js').Config & {reviewers: Record<string, import('../src/types.js').Provider>}} */
   const config = {
+    fallbackLint: false,
     commands: { tests: 'node check.cjs' },
     kinds: [
-      { name: 'code', match: ['**'], commands: ['tests'], checks: ['Tests'] },
+      {
+        name: 'code',
+        match: ['**'],
+        commands: ['tests'],
+        checks: ['Tests'],
+      },
     ],
     reviewers: {
       fixture: {
@@ -128,7 +151,10 @@ else {console.error('unexpected gh args');process.exit(2)}
     );
   const push = () => {
     const remote = join(home, 'remote.git');
-    execFileSync('git', ['init', '--bare', remote], { env, stdio: 'ignore' });
+    execFileSync('git', ['init', '--bare', remote], {
+      env,
+      stdio: 'ignore',
+    });
     git('remote', 'add', 'origin', remote);
     git('push', 'origin', `${base}:refs/heads/main`);
     git('push', '-u', 'origin', 'HEAD:refs/heads/change');

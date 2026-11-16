@@ -2,9 +2,13 @@ import { execute } from './process.js';
 import { createWriteStream, readFileSync, writeFileSync } from 'node:fs';
 import { finished } from 'node:stream/promises';
 import { join, relative } from 'node:path';
+import { lintInvocation } from './lint.js';
 import { github, waitForChecks } from './github.js';
 
-export function failureDetails({ name, output }) {
+export function failureDetails({
+  name,
+  output
+}) {
   const lines = output.split('\n');
   const index = lines.findIndex((line) =>
     /(?:FAIL|Error:|AssertionError|[×✖])/i.test(line),
@@ -27,14 +31,29 @@ export function failureDetails({ name, output }) {
       .join('\n'),
   }));
 }
-async function commandCheck({ cwd, name, command, file }) {
+/** @param {{cwd:string,name:string,command:string,file:string,args?:string[],input?:string}} options */
+async function commandCheck({
+  args,
+  input,
+  cwd,
+  name,
+  command,
+  file
+}) {
   let ok = true;
   const log = createWriteStream(file);
   try {
     await execute({
       cwd,
-      command: process.platform === 'win32' ? 'cmd.exe' : '/bin/sh',
-      args: process.platform === 'win32' ? ['/c', command] : ['-c', command],
+      command: args
+        ? command
+        : process.platform === 'win32'
+          ? 'cmd.exe'
+          : '/bin/sh',
+      args:
+        args ||
+        (process.platform === 'win32' ? ['/c', command] : ['-c', command]),
+      input,
       timeoutMs: CHECK_TIMEOUT_MS,
       log,
     });
@@ -50,9 +69,15 @@ async function commandCheck({ cwd, name, command, file }) {
     name,
     ok,
     log: relative(cwd, file),
-    failures: ok ? [] : failureDetails({ name, output }),
+    failures: ok
+      ? []
+      : failureDetails({
+          name,
+          output,
+        }),
   };
 }
+/** @param {{cwd: string, dir: string, config: import('./types.js').Config, selection: import('./types.js').Selection, ci: boolean, head: string, attempt: number, beforeCommand?: (options: {command: string}) => Promise<void>, afterCommand?: (options: {command: string}) => Promise<void>, localCommands?: string[], paths?: Iterable<string>}} options */
 export async function runChecks({
   cwd,
   dir,
@@ -63,10 +88,14 @@ export async function runChecks({
   attempt,
   beforeCommand,
   afterCommand,
+  localCommands,
+  paths = [],
 }) {
   const checks = [];
   if (!ci) {
-    for (const [index, name] of selection.commands.entries()) {
+    for (const [index, name] of (
+      localCommands || selection.commands
+    ).entries()) {
       const command = config.commands[name];
       await beforeCommand?.({ command });
       const check = await commandCheck({
@@ -78,9 +107,31 @@ export async function runChecks({
       await afterCommand?.({ command });
       checks.push(check);
     }
+    const invocation = lintInvocation({
+      cwd,
+      config,
+      selection,
+      paths
+    });
+    if (invocation) {
+      await beforeCommand?.({ command: 'eslint' });
+      checks.push(
+        await commandCheck({
+          cwd,
+          name: 'deslop lint',
+          ...invocation,
+          file: join(dir, `checks-${attempt}-lint.log`),
+        }),
+      );
+      await afterCommand?.({ command: 'eslint' });
+    }
     return checks;
   }
-  const states = await waitForChecks({ cwd, head, names: selection.checks });
+  const states = await waitForChecks({
+    cwd,
+    head,
+    names: selection.checks,
+  });
   for (const [index, state] of states.entries()) {
     const file = join(dir, `checks-${attempt}-${index}.log`);
     const ok = state.state === 'success';
@@ -102,7 +153,12 @@ export async function runChecks({
       ok,
       fixable: ['failure', 'error', 'timed_out'].includes(state.state),
       log: relative(cwd, file),
-      failures: ok ? [] : failureDetails({ name: state.name, output }),
+      failures: ok
+        ? []
+        : failureDetails({
+            name: state.name,
+            output,
+          }),
     });
   }
   return checks;
