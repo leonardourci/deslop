@@ -302,25 +302,22 @@ async function performRun({
       turn: 0,
       base: info.base,
     });
-    if (data.review.items.some((item) => !item.fixed)) {
+    const unfixed = data.review.items.some((item) => !item.fixed);
+    if (unfixed) {
       await invalidateVerdict({
         head: await git({
           cwd,
           args: ['rev-parse', 'HEAD'],
         }),
       });
-    await commitEdits({
-      cwd,
-      message: 'deslop: fix review findings',
-      data,
-    });
-      throw new DeslopError('UNFIXED', 'Agent left review findings unfixed');
     }
     await commitEdits({
       cwd,
       message: 'deslop: fix review findings',
       data,
     });
+    if (unfixed)
+      throw new DeslopError('UNFIXED', 'Agent left review findings unfixed');
     config = loadConfig({ places });
     let fixes = 0,
       checkedHead,
