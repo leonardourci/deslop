@@ -1,10 +1,6 @@
-import {
-  openSync,
-  closeSync,
-  readFileSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import { DeslopError } from './process.js';
 
 function alive({ pid }) {
@@ -21,64 +17,56 @@ export async function exclusiveRun({
   file,
   work
 }) {
-  for (;;) {
-    try {
-      const fd = openSync(file, 'wx');
-      writeFileSync(fd, String(process.pid));
-      closeSync(fd);
-      break;
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-      let pid;
+  const owner = `${process.pid}-${randomUUID()}`;
+  const prepared = `${file}.${owner}`;
+  mkdirSync(prepared);
+  writeFileSync(join(prepared, owner), '');
+  try {
+    for (;;) {
       try {
-        pid = Number(readFileSync(file, 'utf8'));
-      } catch (readError) {
-        if (readError.code === 'ENOENT') continue;
-        throw readError;
-      }
-      if (alive({ pid }))
-        throw new DeslopError(
-          'RUN_IN_PROGRESS',
-          'deslop is already running in this checkout',
-        );
-      // Claim a dead owner's file atomically so competing takers cannot unlink a new lock.
-      const claim = `${file}.reclaim`;
-      let fd;
-      try {
-        fd = openSync(claim, 'wx');
-        writeFileSync(fd, String(process.pid));
-      } catch (claimError) {
-        if (claimError.code !== 'EEXIST') throw claimError;
+        // Publish a populated directory: a replacement lock is never empty.
+        renameSync(prepared, file);
+        break;
+      } catch (error) {
+        if (!['EEXIST', 'ENOTEMPTY', 'EPERM', 'ENOTDIR'].includes(error.code)) throw error;
+        let owners;
         try {
-          const claimant = Number(readFileSync(claim, 'utf8'));
-          if (!alive({ pid: claimant })) {
-            unlinkSync(claim);
-            continue;
-          }
+          owners = readdirSync(file);
         } catch (readError) {
           if (readError.code === 'ENOENT') continue;
-          throw readError;
+          if (readError.code !== 'ENOTDIR') throw readError;
+          try {
+            const pid = Number(readFileSync(file, 'utf8'));
+            if (alive({ pid })) throw new DeslopError('RUN_IN_PROGRESS', 'deslop is already running in this checkout');
+            // unlink cannot remove a replacement directory from the new protocol.
+            unlinkSync(file);
+          } catch (legacyError) {
+            if (!['ENOENT', 'EISDIR', 'EPERM'].includes(legacyError.code)) throw legacyError;
+          }
+          continue;
         }
-        throw new DeslopError(
-          'RUN_IN_PROGRESS',
-          'deslop lock is being recovered; retry',
-        );
-      }
-      try {
-        if (Number(readFileSync(file, 'utf8')) === pid) unlinkSync(file);
-      } catch (reclaimError) {
-        if (reclaimError.code !== 'ENOENT') throw reclaimError;
-      } finally {
-        closeSync(fd);
-        unlinkSync(claim);
+        if (owners.some((name) => alive({ pid: Number(name.split('-')[0]) })))
+          throw new DeslopError('RUN_IN_PROGRESS', 'deslop is already running in this checkout');
+        try {
+          for (const name of owners) unlinkSync(join(file, name));
+          // A competing replacement contains its unique owner, so rmdir cannot remove it.
+          rmdirSync(file);
+        } catch (reclaimError) {
+          if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(reclaimError.code)) throw reclaimError;
+        }
       }
     }
+  } catch (error) {
+    unlinkSync(join(prepared, owner));
+    rmdirSync(prepared);
+    throw error;
   }
   const clean = () => {
+    unlinkSync(join(file, owner));
     try {
-      if (Number(readFileSync(file, 'utf8')) === process.pid) unlinkSync(file);
+      rmdirSync(file);
     } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
+      if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) throw error;
     }
   };
   process.once('exit', clean);

@@ -36,6 +36,7 @@ function worker({ home }) {
         : reject(new Error(stderr)),
     ),
   );
+  done.catch(() => {});
   function wait(text) {
     if (stdout.includes(text)) return Promise.resolve();
     return new Promise((resolve, reject) => {
@@ -86,4 +87,44 @@ test('a checkout admits only one deslop writer and releases its lock after compl
   await third.wait('entered');
   third.child.stdin.end();
   await third.done;
+});
+
+test('concurrent stale-lock recovery admits one writer, including empty abandoned recovery', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'deslop-recovery-'));
+  const {
+    mkdirSync,
+    writeFileSync
+  } = await import('node:fs');
+  const { spawnSync } = await import('node:child_process');
+  const { pid } = spawnSync(process.execPath, ['-e', '']);
+  const file = join(home, 'deslop.lock');
+  mkdirSync(file);
+  writeFileSync(join(file, `${pid}-dead`), '');
+  const children = [];
+  t.after(async () => {
+    for (const run of children)
+      if (run.child.exitCode === null) run.child.kill('SIGKILL');
+    await Promise.allSettled(children.map(run => run.done));
+    rmSync(home, {
+      recursive: true,
+      force: true
+    });
+  });
+  for (let i = 0; i < 8; i++) children.push(worker({ home }));
+  const results = await Promise.allSettled(children.map(run => run.wait('entered')));
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  const winner = children.find(run => run.output().includes('entered'));
+  winner.child.kill('SIGKILL');
+  await winner.done;
+  const next = worker({ home });
+  children.push(next);
+  await next.wait('entered');
+  next.child.stdin.end();
+  await next.done;
+  mkdirSync(file);
+  const recovered = worker({ home });
+  children.push(recovered);
+  await recovered.wait('entered');
+  recovered.child.stdin.end();
+  await recovered.done;
 });
