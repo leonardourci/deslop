@@ -45,15 +45,30 @@ const SHAPE = {
   review: {
     found: 1,
     fixed: 1,
-    items: [{ id: 'R1', where: 'file:line', problem: 'one line', fixed: true }],
+    items: [
+      {
+        id: 'R1',
+        where: 'file:line',
+        problem: 'one line',
+        fixed: true,
+      },
+    ],
   },
   commits: ['commit'],
   newFiles: ['new.test.js'],
-  checkFixes: [{ turn: 1, items: [] }],
+  checkFixes: [
+    {
+      turn: 1,
+      items: [],
+    },
+  ],
   left: ['uncommitted.txt'],
   unstableCommands: ['pnpm lint:fix'],
 };
-async function init({ places, options }) {
+async function init({
+  places,
+  options
+}) {
   const target = join(places.root, CONFIG_FILE);
   if (existsSync(target))
     throw new DeslopError('CONFIG', 'Config already exists');
@@ -89,7 +104,7 @@ async function init({ places, options }) {
             match: ['**/*.md'],
             commands: [],
             checks: [],
-            instructions: ['writing'],
+            instructions: ['kill-ai-slop'],
           },
           {
             name: 'code',
@@ -100,20 +115,32 @@ async function init({ places, options }) {
         ],
         checkFixAttempts: 1,
       };
-  validateConfig({ config, root: places.root });
+  validateConfig({
+    config,
+    root: places.root,
+  });
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, `${JSON.stringify(config, null, 2)}\n`, { flag: 'wx' });
   console.log(
     `wrote: ${target}\nnext: configure commands and kinds, then commit before running deslop`,
   );
 }
-async function status({ places, options }) {
+async function status({
+  places,
+  options
+}) {
   const cwd = places.root,
-    head = await git({ cwd, args: ['rev-parse', 'HEAD'] });
+    head = await git({
+      cwd,
+      args: ['rev-parse', 'HEAD'],
+    });
   let marker;
   try {
     marker = JSON.parse(
-      await optionalGit({ cwd, args: ['notes', '--ref=deslop', 'show', head] }),
+      await optionalGit({
+        cwd,
+        args: ['notes', '--ref=deslop', 'show', head],
+      }),
     );
   } catch (error) {
     if (error.code !== 'COMMAND' && !(error instanceof SyntaxError))
@@ -169,9 +196,15 @@ async function status({ places, options }) {
         )
           .split('\0')
           .filter(Boolean);
-        selection = select({ config, paths });
+        selection = select({
+          config,
+          paths,
+        });
       }
-      const { published, statusReason } = await publishSuccess({
+      const {
+        published,
+        statusReason
+      } = await publishSuccess({
         cwd,
         head,
         branch,
@@ -228,8 +261,9 @@ export async function main({
   }
   if (options.version) {
     console.log(
-      JSON.parse(readFileSync(new URL('../package.json', import.meta.url)))
-        .version,
+      JSON.parse(
+        readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+      ).version,
     );
     return;
   }
@@ -262,8 +296,16 @@ export async function main({
     return;
   }
   const places = await locations({ cwd });
-  if (command === 'init') return await init({ places, options });
-  if (command === 'status') return await status({ places, options });
+  if (command === 'init')
+    return await init({
+      places,
+      options,
+    });
+  if (command === 'status')
+    return await status({
+      places,
+      options,
+    });
   if (command !== 'run')
     throw new DeslopError('USAGE', `Unknown command: ${command}`);
   if (
@@ -275,7 +317,10 @@ export async function main({
       flag: '--reviewer',
       question: 'Reviewer',
     });
-  const result = await run({ places, options });
+  const result = await run({
+    places,
+    options,
+  });
   if (result.verdict !== 'passed') process.exitCode = 1;
 }
 if (

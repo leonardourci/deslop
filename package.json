@@ -20,7 +20,8 @@
     "src",
     "README.md",
     "docs",
-    "LICENSE"
+    "LICENSE",
+    "skills"
   ],
   "license": "Apache-2.0"
 }

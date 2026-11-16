@@ -4,14 +4,20 @@ import { git, DeslopError } from './process.js';
 
 const INSTRUCTION_ROOTS = ['.agents', '.claude', '.codex', 'skills'];
 const split = (value) => value.split('\0').filter(Boolean);
-export function instructionPath({ path, configured = [] }) {
+export function instructionPath({
+  path,
+  configured = []
+}) {
   return (
     INSTRUCTION_ROOTS.includes(path.split('/')[0]) ||
     /(^|\/)(AGENTS|CLAUDE)\.md$/.test(path) ||
     configured.includes(path)
   );
 }
-function projectPath({ cwd, path }) {
+function projectPath({
+  cwd,
+  path
+}) {
   const absolute = resolve(cwd, path);
   if (
     !absolute.startsWith(cwd + sep) ||
@@ -30,13 +36,20 @@ function projectPath({ cwd, path }) {
   }
   return absolute;
 }
-export async function reviewScope({ cwd, base, config }) {
+export async function reviewScope({
+  cwd,
+  base,
+  config
+}) {
   const [diff, tracked, ignored, untracked] = await Promise.all([
     git({
       cwd,
       args: ['diff', '--name-only', '--no-renames', '-z', base, 'HEAD'],
     }),
-    git({ cwd, args: ['ls-files', '-z'] }),
+    git({
+      cwd,
+      args: ['ls-files', '-z'],
+    }),
     git({
       cwd,
       args: [
@@ -53,18 +66,24 @@ export async function reviewScope({ cwd, base, config }) {
       args: ['ls-files', '--others', '--exclude-standard', '--directory', '-z'],
     }),
   ]);
-  const configured = Object.values(config.instructions || {}).map((path) =>
-    relative(cwd, resolve(cwd, path)).split(sep).join('/'),
-  );
+  const configured = Object.values(config.instructions || {})
+    .filter((file) => typeof file === 'string')
+    .map((path) => relative(cwd, resolve(cwd, path)).split(sep).join('/'));
   const trackedFiles = new Set(split(tracked));
   const instructionFiles = split(diff).filter(
     (path) =>
       trackedFiles.has(path) &&
-      instructionPath({ path, configured }) &&
+      instructionPath({
+        path,
+        configured,
+      }) &&
       (configured.includes(path) || /\.(md|mdx|rst|txt)$/i.test(path)) &&
-      projectPath({ cwd, path }),
+      projectPath({
+        cwd,
+        path,
+      }),
   );
-  if (instructionFiles.some((path) => /[*?\[\]\r\n]/.test(path)))
+  if (instructionFiles.some((path) => /[*?[\]\r\n]/.test(path)))
     throw new DeslopError(
       'EDITOR_SCOPE',
       'Instruction filenames with glob characters cannot receive a literal write grant',
@@ -72,7 +91,10 @@ export async function reviewScope({ cwd, base, config }) {
   const excluded = [...new Set([...split(ignored), ...split(untracked)])];
   const protectedInstructions = split(tracked).filter(
     (path) =>
-      instructionPath({ path, configured }) && !instructionFiles.includes(path),
+      instructionPath({
+        path,
+        configured,
+      }) && !instructionFiles.includes(path),
   );
   const normalDirectories = readdirSync(cwd, { withFileTypes: true })
     .filter(
@@ -94,7 +116,11 @@ export async function reviewScope({ cwd, base, config }) {
     configured,
   };
 }
-export function codexFilesystem({ cwd, common, scope }) {
+export function codexFilesystem({
+  cwd,
+  common,
+  scope
+}) {
   const rules = {
     ':tmpdir': 'read',
     ':slash_tmp': 'read',
@@ -109,7 +135,11 @@ export function codexFilesystem({ cwd, common, scope }) {
   for (const path of scope.excluded) rules[resolve(cwd, path)] = 'deny';
   return rules;
 }
-export function claudeEdits({ cwd, common, scope }) {
+export function claudeEdits({
+  cwd,
+  common,
+  scope
+}) {
   const absolute = (path) => '/' + resolve(cwd, path);
   const allow = [
     `Edit(${absolute('*')})`,
@@ -139,17 +169,31 @@ export function claudeEdits({ cwd, common, scope }) {
       `Read(${absolute(path)})`,
       `Read(${absolute(path).replace(/\/$/, '')}/**)`,
     );
-  return { allow, deny };
+  return {
+    allow,
+    deny,
+  };
 }
-export async function assertInstructionScope({ cwd, scope }) {
+export async function assertInstructionScope({
+  cwd,
+  scope
+}) {
   const [diff, untracked] = await Promise.all([
-    git({ cwd, args: ['diff', '--name-only', '-z', 'HEAD'] }),
-    git({ cwd, args: ['ls-files', '--others', '--exclude-standard', '-z'] }),
+    git({
+      cwd,
+      args: ['diff', '--name-only', '-z', 'HEAD'],
+    }),
+    git({
+      cwd,
+      args: ['ls-files', '--others', '--exclude-standard', '-z'],
+    }),
   ]);
   const outside = [...split(diff), ...split(untracked)].find(
     (path) =>
-      instructionPath({ path, configured: scope.configured }) &&
-      !scope.instructionFiles.includes(path),
+      instructionPath({
+        path,
+        configured: scope.configured,
+      }) && !scope.instructionFiles.includes(path),
   );
   if (outside)
     throw new DeslopError(

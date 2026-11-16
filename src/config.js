@@ -1,9 +1,14 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import picomatch from 'picomatch';
 import { git, DeslopError } from './process.js';
-import { DEFAULT_INSTRUCTIONS } from './defaults.js';
+import {
+  DEFAULT_SKILLS,
+  canonicalSkill,
+  defaultSkills,
+  instructionPaths,
+} from './instructions.js';
 
 export const CONFIG_FILE = 'deslop.config.json';
 function fail(message) {
@@ -38,7 +43,10 @@ export function validateModels({ models = {} }) {
       fail(`Invalid model settings for ${provider}`);
   }
 }
-export function validateConfig({ config, root }) {
+export function validateConfig({
+  config,
+  root
+}) {
   const keys = [
     'commands',
     'kinds',
@@ -47,6 +55,7 @@ export function validateConfig({ config, root }) {
     'reviewerModels',
     'reviewers',
     'publishLocal',
+    'fallbackLint',
   ];
   if (!object(config) || Object.keys(config).some((key) => !keys.includes(key)))
     fail('Config contains unsupported settings');
@@ -67,12 +76,16 @@ export function validateConfig({ config, root }) {
     typeof config.publishLocal !== 'boolean'
   )
     fail('publishLocal must be boolean');
-  if (config.instructions !== undefined && !object(config.instructions))
-    fail('instructions must map names to files');
-  for (const [name, file] of Object.entries(config.instructions || {})) {
-    if (typeof file !== 'string' || !existsSync(resolve(root, file)))
-      fail(`Missing instructions file: ${name}`);
-  }
+  if (
+    config.fallbackLint !== undefined &&
+    typeof config.fallbackLint !== 'boolean'
+  )
+    fail('fallbackLint must be boolean');
+  if (config.instructions !== undefined)
+    validateInstructions({
+      instructions: config.instructions,
+      root,
+    });
   if (!Array.isArray(config.kinds) || !config.kinds.length)
     fail('kinds must be nonempty');
   const names = new Set();
@@ -105,7 +118,7 @@ export function validateConfig({ config, root }) {
       (!strings(kind.instructions) ||
         kind.instructions.some(
           (name) =>
-            !Object.hasOwn(DEFAULT_INSTRUCTIONS, name) &&
+            !Object.hasOwn(DEFAULT_SKILLS, canonicalSkill(name)) &&
             !Object.hasOwn(config.instructions || {}, name),
         ))
     )
@@ -128,14 +141,27 @@ export function validateConfig({ config, root }) {
   }
   return config;
 }
-export function select({ config, paths }) {
+export function select({
+  config,
+  paths,
+  hasTests = false
+}) {
   const selected = new Set();
+  const instructions = new Set();
   for (const path of paths) {
     const kind = config.kinds.find((kind) =>
       picomatch(kind.match, { dot: true })(path),
     );
     if (!kind) fail(`No change kind matches ${path}`);
     selected.add(kind);
+    const names =
+      kind.instructions ||
+      defaultSkills({
+        kind,
+        path,
+        hasTests,
+      });
+    for (const name of names) instructions.add(canonicalSkill(name));
   }
   const kinds = [...selected];
   return {
@@ -148,24 +174,54 @@ export function select({ config, paths }) {
       ),
     ],
     instructions: [
-      ...new Set(
-        kinds.flatMap(
-          (kind) => kind.instructions ?? Object.keys(DEFAULT_INSTRUCTIONS),
-        ),
+      ...Object.keys(DEFAULT_SKILLS).filter((name) => instructions.has(name)),
+      ...Array.from(instructions).filter(
+        (name) => !Object.hasOwn(DEFAULT_SKILLS, name),
       ),
     ],
   };
 }
-export function instructionsFor({ root, config, selection }) {
+export function instructionsFor({
+  root,
+  config,
+  selection
+}) {
+  const paths = {
+    ...DEFAULT_SKILLS,
+    ...instructionPaths({
+      root,
+      instructions: config.instructions,
+    }),
+  };
   return selection.instructions
-    .map(
-      (name) =>
-        `${name}:\n${config.instructions?.[name] ? readFileSync(resolve(root, config.instructions[name]), 'utf8') : DEFAULT_INSTRUCTIONS[name]}`,
-    )
+    .filter((name) => paths[name] !== false)
+    .map((name) => `${name}:\n${readFileSync(paths[name], 'utf8')}`)
     .join('\n\n');
 }
-export async function locations({ cwd, env = process.env }) {
-  const root = await git({ cwd, args: ['rev-parse', '--show-toplevel'] });
+function validateInstructions({
+  instructions,
+  root
+}) {
+  if (!object(instructions))
+    fail('instructions must map skill names to files or false');
+  for (const [name, file] of Object.entries(instructions)) {
+    if (file === false) continue;
+    if (
+      typeof file !== 'string' ||
+      !file.trim() ||
+      !existsSync(resolve(root, file))
+    )
+      fail(`Missing instructions file: ${name}`);
+  }
+}
+export async function locations({
+  cwd,
+  env = process.env
+}) {
+  const root = await git({
+    cwd,
+    args: ['rev-parse', '--show-toplevel'],
+  });
   const common = await git({
     cwd: root,
     args: ['rev-parse', '--path-format=absolute', '--git-common-dir'],
@@ -176,9 +232,17 @@ export async function locations({ cwd, env = process.env }) {
   );
   const lock = resolve(
     root,
-    await git({ cwd: root, args: ['rev-parse', '--git-path', 'deslop.lock'] }),
+    await git({
+      cwd: root,
+      args: ['rev-parse', '--git-path', 'deslop.lock'],
+    }),
   );
-  return { root, common, home, lock };
+  return {
+    root,
+    common,
+    home,
+    lock,
+  };
 }
 export function loadSettings({ home }) {
   const file = join(home, 'settings.json');
@@ -199,11 +263,35 @@ export function loadSettings({ home }) {
   validateModels({ models: settings.reviewerModels });
   return settings;
 }
-export function loadConfig({ places }) {
+export function loadConfig({
+  places,
+  env = process.env
+}) {
   const file = join(places.root, CONFIG_FILE);
   if (!existsSync(file)) fail('No config; run deslop init');
-  return validateConfig({
+  const config = validateConfig({
     root: places.root,
     config: readJson({ path: file }),
   });
+  config.instructions = instructionPaths({
+    root: places.root,
+    instructions: config.instructions,
+  });
+  if (env.DESLOP_INSTRUCTIONS) {
+    const localFile = resolve(env.DESLOP_INSTRUCTIONS);
+    const instructions = readJson({ path: localFile });
+    const root = dirname(localFile);
+    validateInstructions({
+      instructions,
+      root,
+    });
+    config.instructions = {
+      ...config.instructions,
+      ...instructionPaths({
+        root,
+        instructions,
+      }),
+    };
+  }
+  return config;
 }
