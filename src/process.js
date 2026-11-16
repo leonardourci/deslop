@@ -72,10 +72,7 @@ export async function execute({
           child.stdin.destroy();
           child.stdout.destroy();
           child.stderr.destroy();
-          child.unref();
           resolve();
-          cleanup();
-          fail(child.exitCode, child.signalCode);
         }, KILL_GRACE_MS);
       });
     };

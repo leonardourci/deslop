@@ -19,7 +19,7 @@ test('hung commands and their children are terminated with a timeout reason', as
     }),
     { code: 'COMMAND_TIMEOUT' },
   );
-  const pid = Number(output.match(/descendant ready (\d+)/)?.[1]);
+  const pid = Number(output.match(/descendant ready (\d+)\r?\n/)?.[1]);
   assert.ok(pid, output);
   t.after(() => { if (running(pid)) process.kill(pid, 'SIGKILL'); });
   const deadline = Date.now() + 5000;
@@ -80,7 +80,7 @@ test('interrupting a command runner terminates its active child group before ret
     const timer = setTimeout(() => reject(new Error('descendant did not start')), 5000);
     driver.stdout.on('data', chunk => {
       output += chunk;
-      const match = output.match(/descendant ready (\d+)/);
+      const match = output.match(/descendant ready (\d+)\r?\n/);
       if (match) {
         pid = Number(match[1]);
         clearTimeout(timer);
