@@ -41,7 +41,10 @@ export async function execute({
     let escalation;
     let terminated = Promise.resolve();
     const kill = (signal) => {
-      if (process.platform === 'win32') child.kill(signal);
+      if (process.platform === 'win32') {
+        const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+        killer.on('error', () => child.kill(signal));
+      }
       else {
         try {
           process.kill(-child.pid, signal);
@@ -56,6 +59,8 @@ export async function execute({
       terminated = new Promise((resolve) => {
         escalation = setTimeout(() => {
           kill('SIGKILL');
+          child.stdout.destroy();
+          child.stderr.destroy();
           resolve();
         }, KILL_GRACE_MS);
       });
