@@ -1,5 +1,5 @@
 import { existsSync, lstatSync } from 'node:fs';
-import { resolve, sep } from 'node:path';
+import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** @param {{cwd:string, config:import('./types.js').Config, selection:import('./types.js').Selection, paths:Iterable<string>}} options */
@@ -21,10 +21,13 @@ export function lintInvocation({
     .filter((path) => /\.[cm]?[jt]sx?$/i.test(path))
     .map((path) => resolve(cwd, path))
     .filter(
-      (path) =>
-        path.startsWith(cwd + sep) &&
-        existsSync(path) &&
-        lstatSync(path).isFile(),
+      (path) => {
+        if (!path.startsWith(cwd + sep) || !existsSync(path)) return false;
+        if (!lstatSync(path).isFile()) return false;
+        for (let parent = dirname(path); parent !== cwd; parent = dirname(parent))
+          if (lstatSync(parent).isSymbolicLink()) return false;
+        return true;
+      },
     );
   if (!files.length) return null;
   return {

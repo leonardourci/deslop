@@ -6,6 +6,20 @@ import { spawnSync } from 'node:child_process';
 import { fixture } from './fixtures.js';
 const pass = (r) => assert.equal(r.status, 0, r.stdout + r.stderr);
 
+test('initial review config edits determine the checks used for proof', (t) => {
+  const f = fixture(t);
+  const config = JSON.parse(JSON.stringify(f.config));
+  config.commands.tests = 'node -e "process.exit(1)"';
+  config.checkFixAttempts = 0;
+  const state = f.load();
+  state.actions = [{ files: { 'deslop.config.json': JSON.stringify(config) } }];
+  f.save(state);
+  const result = f.call('run', '--reviewer', 'fixture');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(f.runs()[0].checks[0].ok, false);
+  assert.equal(f.call('status').status, 1);
+});
+
 test('a missing Codex result after edits stops before fallback', (t) => {
   const f = fixture(t);
   writeFileSync(

@@ -157,8 +157,8 @@ async function performRun({
     cwd,
     override: options.base,
   });
-  const config = loadConfig({ places }),
-    settings = loadSettings({ home: places.home });
+  let config = loadConfig({ places });
+  const settings = loadSettings({ home: places.home });
   const choices = reviewerChoices({
     override: options.reviewer,
     settings,
@@ -315,6 +315,7 @@ async function performRun({
       });
       throw new DeslopError('UNFIXED', 'Agent left review findings unfixed');
     }
+    config = loadConfig({ places });
     let fixes = 0,
       checkedHead,
       finalChecks,
