@@ -52,7 +52,12 @@ function worker({ home }) {
       });
     });
   }
-  return { child, done, wait, output: () => stdout };
+  return {
+    child,
+    done,
+    wait,
+    output: () => stdout,
+  };
 }
 
 test('a checkout admits only one deslop writer and releases its lock after completion', async (t) => {
@@ -62,7 +67,10 @@ test('a checkout admits only one deslop writer and releases its lock after compl
     for (const run of children)
       if (run.child.exitCode === null) run.child.kill('SIGKILL');
     await Promise.allSettled(children.map((run) => run.done));
-    rmSync(home, { recursive: true, force: true });
+    rmSync(home, {
+      recursive: true,
+      force: true,
+    });
   });
   const first = worker({ home });
   children.push(first);

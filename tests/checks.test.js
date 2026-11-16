@@ -15,8 +15,19 @@ test('CI waiting replaces local commands rather than running both', (t) => {
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const data = f.runs()[0];
   assert.deepEqual(
-    data.checks.map(({ name, ok }) => ({ name, ok })),
-    [{ name: 'Tests', ok: true }],
+    data.checks.map(({
+      name,
+      ok
+    }) => ({
+      name,
+      ok,
+    })),
+    [
+      {
+        name: 'Tests',
+        ok: true,
+      },
+    ],
   );
   assert.match(
     readFileSync(join(f.root, data.checks[0].log), 'utf8'),
@@ -40,7 +51,12 @@ test('successful CI checks do not prevent repairing another failed check', (t) =
   const s = f.load();
   s.checks = [
     success,
-    { id: 2, name: 'Tests', status: 'completed', conclusion: 'failure' },
+    {
+      id: 2,
+      name: 'Tests',
+      status: 'completed',
+      conclusion: 'failure',
+    },
   ];
   s.actions = [
     {},
@@ -48,7 +64,12 @@ test('successful CI checks do not prevent repairing another failed check', (t) =
       edit: 'fixed',
       checks: [
         success,
-        { id: 3, name: 'Tests', status: 'completed', conclusion: 'success' },
+        {
+          id: 3,
+          name: 'Tests',
+          status: 'completed',
+          conclusion: 'success',
+        },
       ],
     },
   ];

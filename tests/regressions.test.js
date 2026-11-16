@@ -50,7 +50,10 @@ test('PR review prefers the remote base over a stale local base (p2)', (t) => {
   f.commit();
   f.git('branch', '-f', 'main', 'HEAD~1');
   const s = f.load();
-  s.pr = { state: 'OPEN', baseRefName: 'main' };
+  s.pr = {
+    state: 'OPEN',
+    baseRefName: 'main',
+  };
   f.save(s);
   // Keep local main stale, while retaining a runnable config on the branch.
   f.git('branch', '-f', 'main', 'HEAD~2');
@@ -147,7 +150,10 @@ test('status refuses copied notes and dirty work', (t) => {
     'add',
     '-f',
     '-m',
-    JSON.stringify({ ...note, head: 'different' }),
+    JSON.stringify({
+      ...note,
+      head: 'different',
+    }),
     head,
   );
   assert.equal(f.call('status').status, 1);
@@ -161,7 +167,13 @@ test('commit statuses count as exact-head CI checks', (t) => {
   f.push();
   const s = f.load();
   s.checks = [];
-  s.statuses = [{ id: 1, context: 'Tests', state: 'success' }];
+  s.statuses = [
+    {
+      id: 1,
+      context: 'Tests',
+      state: 'success',
+    },
+  ];
   f.save(s);
   pass(f.call('run', '--reviewer', 'fixture'));
   assert.deepEqual(
@@ -180,7 +192,12 @@ test('unfixed check repairs end red and stay separate from review findings', (t)
     {
       edit: 'good',
       items: [
-        { id: 'R1', where: 'work.txt', problem: 'unresolved', fixed: false },
+        {
+          id: 'R1',
+          where: 'work.txt',
+          problem: 'unresolved',
+          fixed: false,
+        },
       ],
     },
   ];
@@ -227,7 +244,7 @@ test('init accepts an explicit config and repeated command/check options', (t) =
   rmSync(join(f.root, 'deslop.config.json'));
   pass(f.call('init', '--config', source));
   assert.deepEqual(
-    JSON.parse(readFileSync(join(f.root, 'deslop.config.json'))),
+    JSON.parse(readFileSync(join(f.root, 'deslop.config.json'), 'utf8')),
     f.config,
   );
   rmSync(join(f.root, 'deslop.config.json'));
@@ -242,7 +259,9 @@ test('init accepts an explicit config and repeated command/check options', (t) =
       '--check=Lint',
     ),
   );
-  const config = JSON.parse(readFileSync(join(f.root, 'deslop.config.json')));
+  const config = JSON.parse(
+    readFileSync(join(f.root, 'deslop.config.json'), 'utf8'),
+  );
   assert.deepEqual(config.commands, {
     tests: 'npm test',
     lint: 'npm run lint',
@@ -310,7 +329,10 @@ test('workflow changes in check repairs appear in the summary', (t) => {
   const s = f.load();
   s.actions = [
     {},
-    { edit: 'still bad', files: { '.github/workflows/test.yml': 'workflow' } },
+    {
+      edit: 'still bad',
+      files: { '.github/workflows/test.yml': 'workflow' },
+    },
     { edit: 'good' },
   ];
   f.save(s);
@@ -374,7 +396,12 @@ test('red rerun removes a previous note and publishes failure together', (t) => 
   s.actions = [
     {
       items: [
-        { id: 'R1', where: 'work.txt', problem: 'unfixed', fixed: false },
+        {
+          id: 'R1',
+          where: 'work.txt',
+          problem: 'unfixed',
+          fixed: false,
+        },
       ],
     },
   ];
@@ -418,7 +445,12 @@ test('fresh check repairs receive review items and paths and keep review counts 
     {
       edit: 'good',
       items: [
-        { id: 'R1', where: 'work.txt', problem: 'check repair', fixed: true },
+        {
+          id: 'R1',
+          where: 'work.txt',
+          problem: 'check repair',
+          fixed: true,
+        },
       ],
     },
   ];

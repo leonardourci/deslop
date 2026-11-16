@@ -19,7 +19,11 @@ test('only tracked instruction files in the diff gain write access and git stays
   f.commit();
   writeFileSync(join(f.root, '.agents', 'ignored.md'), 'private');
   writeFileSync(join(f.root, '.agents', 'untracked.md'), 'keep');
-  const scope = await reviewScope({ cwd: f.root, base, config: f.config });
+  const scope = await reviewScope({
+    cwd: f.root,
+    base,
+    config: f.config,
+  });
   assert.deepEqual(scope.instructionFiles, ['.agents/changed.md']);
   const files = codexFilesystem({
     cwd: f.root,

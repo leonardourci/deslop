@@ -107,7 +107,10 @@ test('only ciRequired kinds are checked alongside local commands', (t) => {
       commands: [],
       checks: ['Optional'],
     },
-    { ...f.config.kinds[0], ciRequired: true },
+    {
+      ...f.config.kinds[0],
+      ciRequired: true,
+    },
   ];
   f.configure();
   f.commit();
@@ -154,7 +157,12 @@ test('status --publish cannot bypass ciRequired after CI turns red', (t) => {
 test('status publication preserves the explicit review base check selection', (t) => {
   const f = fixture(t);
   f.config.kinds = [
-    { name: 'docs', match: ['*.md'], commands: [], checks: ['Docs'] },
+    {
+      name: 'docs',
+      match: ['*.md'],
+      commands: [],
+      checks: ['Docs'],
+    },
     f.config.kinds[0],
   ];
   f.configure();
@@ -166,7 +174,12 @@ test('status publication preserves the explicit review base check selection', (t
   f.git('push', 'origin', 'HEAD:refs/heads/change');
   const s = f.load();
   s.checks = [
-    { id: 1, name: 'Docs', status: 'completed', conclusion: 'success' },
+    {
+      id: 1,
+      name: 'Docs',
+      status: 'completed',
+      conclusion: 'success',
+    },
   ];
   f.save(s);
   pass(f.call('run', '--base', 'parent', '--local', '--reviewer', 'fixture'));

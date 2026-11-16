@@ -67,7 +67,12 @@ test('status rejects malformed proof counts and null checks without crashing', (
     head = f.git('rev-parse', 'HEAD');
   for (const fields of [
     { review: {} },
-    { review: { found: -1, fixed: -1 } },
+    {
+      review: {
+        found: -1,
+        fixed: -1,
+      },
+    },
     { checks: [null] },
   ]) {
     const marker = {
@@ -75,7 +80,10 @@ test('status rejects malformed proof counts and null checks without crashing', (
       head,
       verdict: 'passed',
       checks: [],
-      review: { found: 0, fixed: 0 },
+      review: {
+        found: 0,
+        fixed: 0,
+      },
       ...fields,
     };
     f.git(
@@ -118,8 +126,18 @@ test('removing a file introduced by an earlier fix retains its required checks',
   const f = fixture(t);
   f.config.commands.extra = 'node -e "process.exit(1)"';
   f.config.kinds = [
-    { name: 'extra', match: ['extra.txt'], commands: ['extra'], checks: [] },
-    { name: 'other', match: ['**'], commands: [], checks: [] },
+    {
+      name: 'extra',
+      match: ['extra.txt'],
+      commands: ['extra'],
+      checks: [],
+    },
+    {
+      name: 'other',
+      match: ['**'],
+      commands: [],
+      checks: [],
+    },
   ];
   f.config.reviewers.fixture = {
     command: [
@@ -159,7 +177,12 @@ test('reverting a changed file during review retains its required checks', (t) =
       commands: ['tests'],
       checks: ['Tests'],
     },
-    { name: 'other', match: ['**'], commands: [], checks: [] },
+    {
+      name: 'other',
+      match: ['**'],
+      commands: [],
+      checks: [],
+    },
   ];
   f.configure();
   f.git('add', '.');
@@ -168,7 +191,12 @@ test('reverting a changed file during review retains its required checks', (t) =
   writeFileSync(join(f.root, 'work.txt'), 'bad');
   f.commit();
   const s = f.load();
-  s.actions = [{ edit: 'good', items: [finding] }];
+  s.actions = [
+    {
+      edit: 'good',
+      items: [finding],
+    },
+  ];
   f.save(s);
   passed(f.call('run', '--base', 'review-base', '--reviewer', 'fixture'));
   assert.equal(f.runs()[0].checks.length, 1);
@@ -191,7 +219,12 @@ test('changed directory symlinks are reviewed without reading their targets', (t
 test('commits review edits before checks and marks the final local commit without any PR', (t) => {
   const f = fixture(t);
   const s = f.load();
-  s.actions = [{ edit: 'good', items: [finding] }];
+  s.actions = [
+    {
+      edit: 'good',
+      items: [finding],
+    },
+  ];
   f.save(s);
   writeFileSync(join(f.root, 'work.txt'), 'bad');
   f.commit();
@@ -231,7 +264,13 @@ test('failed checks resume the same session and produce bounded failure excerpts
   writeFileSync(join(f.root, 'work.txt'), 'bad');
   f.commit();
   const s = f.load();
-  s.actions = [{}, { edit: 'good', items: [finding] }];
+  s.actions = [
+    {},
+    {
+      edit: 'good',
+      items: [finding],
+    },
+  ];
   f.save(s);
   passed(f.call('--reviewer', 'fixture'));
   const calls = f.load().calls,
@@ -330,7 +369,12 @@ test('pushed CI runs push only review fixes and publish an exact-head status wit
   f.push();
   const initial = f.git('rev-parse', 'HEAD');
   const s = f.load();
-  s.actions = [{ edit: 'good', items: [finding] }];
+  s.actions = [
+    {
+      edit: 'good',
+      items: [finding],
+    },
+  ];
   f.save(s);
   passed(f.call('run', '--reviewer', 'fixture'));
   const head = f.git('rev-parse', 'HEAD');
@@ -370,7 +414,12 @@ test('local override keeps fix commits local even when the starting commit was p
   f.push();
   const initial = f.git('rev-parse', 'HEAD');
   const s = f.load();
-  s.actions = [{ edit: 'good', items: [finding] }];
+  s.actions = [
+    {
+      edit: 'good',
+      items: [finding],
+    },
+  ];
   f.save(s);
   writeFileSync(join(f.root, 'work.txt'), 'bad');
   f.commit();
@@ -391,12 +440,23 @@ test('local override keeps fix commits local even when the starting commit was p
 test('providers deny git tools, retain sessions, detect hosted Codex and apply model precedence', (t) => {
   const f = fixture(t);
   f.env.CODEX_THREAD_ID = 'hosted';
-  f.config.reviewerModels = { codex: { model: 'repo', effort: 'high' } };
+  f.config.reviewerModels = {
+    codex: {
+      model: 'repo',
+      effort: 'high',
+    },
+  };
   f.configure();
   writeFileSync(join(f.root, 'work.txt'), 'bad');
   f.commit();
   const s = f.load();
-  s.actions = [{}, { edit: 'good', items: [finding] }];
+  s.actions = [
+    {},
+    {
+      edit: 'good',
+      items: [finding],
+    },
+  ];
   f.save(s);
   passed(f.call('run', '--reviewer-model', 'run'));
   const calls = f.load().calls;
@@ -434,7 +494,13 @@ test('custom commands without resume get a fresh call explaining earlier commits
   writeFileSync(join(f.root, 'work.txt'), 'bad');
   f.commit();
   const s = f.load();
-  s.actions = [{}, { edit: 'good', items: [finding] }];
+  s.actions = [
+    {},
+    {
+      edit: 'good',
+      items: [finding],
+    },
+  ];
   f.save(s);
   passed(f.call('run', '--reviewer', 'fixture'));
   assert.match(f.load().calls[1].prompt, /Fresh fallback call/);
@@ -449,7 +515,16 @@ test('invalid agent output and unfixed items cannot create proof', (t) => {
   failed(f.call('run', '--reviewer', 'fixture'), 'REVIEW_OUTPUT');
   assert.equal(f.call('status').status, 1);
   s = f.load();
-  s.actions = [{ items: [{ ...finding, fixed: false }] }];
+  s.actions = [
+    {
+      items: [
+        {
+          ...finding,
+          fixed: false,
+        },
+      ],
+    },
+  ];
   f.save(s);
   failed(f.call('run', '--reviewer', 'fixture'), 'UNFIXED');
   assert.equal(f.call('status').status, 1);
@@ -461,7 +536,10 @@ test('base override wins over an open stacked PR base and no PR falls back local
   writeFileSync(join(f.root, 'later.txt'), 'later');
   f.commit();
   const s = f.load();
-  s.pr = { state: 'OPEN', baseRefName: 'parent' };
+  s.pr = {
+    state: 'OPEN',
+    baseRefName: 'parent',
+  };
   f.save(s);
   passed(f.call('run', '--reviewer', 'fixture'));
   assert.doesNotMatch(f.load().calls[0].prompt, /diff --git a\/work.txt/);
@@ -518,7 +596,12 @@ test('failed CI resumes the agent, pushes only its fix and waits on the new exac
       edit: 'good',
       items: [finding],
       checks: [
-        { id: 2, name: 'Tests', status: 'completed', conclusion: 'success' },
+        {
+          id: 2,
+          name: 'Tests',
+          status: 'completed',
+          conclusion: 'success',
+        },
       ],
     },
   ];
@@ -547,7 +630,10 @@ test('unavailable providers fall back with their own models rather than the prim
   const f = fixture(t);
   f.config.reviewers.missing = { command: ['missing-agent'] };
   f.config.reviewerModels = {
-    fixture: { model: 'fallback-model', effort: 'low' },
+    fixture: {
+      model: 'fallback-model',
+      effort: 'low',
+    },
   };
   f.configure();
   f.commit();

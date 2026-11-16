@@ -1,10 +1,23 @@
 import { optionalGit } from './git.js';
 import { execute, git, DeslopError } from './process.js';
 
-export async function github({ cwd, args, input }) {
-  return await execute({ cwd, command: 'gh', args, input });
+/** @param {{cwd: string, args: string[], input?: string}} options */
+export async function github({
+  cwd,
+  args,
+  input
+}) {
+  return await execute({
+    cwd,
+    command: 'gh',
+    args,
+    input,
+  });
 }
-export async function remoteHead({ cwd, branch }) {
+export async function remoteHead({
+  cwd,
+  branch
+}) {
   try {
     return (
       (
@@ -21,11 +34,21 @@ export async function remoteHead({ cwd, branch }) {
 }
 export async function repository({ cwd }) {
   return JSON.parse(
-    await github({ cwd, args: ['repo', 'view', '--json', 'nameWithOwner'] }),
+    await github({
+      cwd,
+      args: ['repo', 'view', '--json', 'nameWithOwner'],
+    }),
   ).nameWithOwner;
 }
-export async function branchInfo({ cwd, override }) {
-  const branch = await git({ cwd, args: ['symbolic-ref', '--short', 'HEAD'] });
+/** @param {{cwd: string, override?: string}} options */
+export async function branchInfo({
+  cwd,
+  override
+}) {
+  const branch = await git({
+    cwd,
+    args: ['symbolic-ref', '--short', 'HEAD'],
+  });
   const remoteDefault = await optionalGit({
     cwd,
     args: ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'],
@@ -34,7 +57,10 @@ export async function branchInfo({ cwd, override }) {
   if (!defaultBranch) {
     for (const candidate of ['main', 'master']) {
       if (
-        await optionalGit({ cwd, args: ['rev-parse', '--verify', candidate] })
+        await optionalGit({
+          cwd,
+          args: ['rev-parse', '--verify', candidate],
+        })
       ) {
         defaultBranch = candidate;
         break;
@@ -70,21 +96,48 @@ export async function branchInfo({ cwd, override }) {
   const remoteBase = `origin/${candidate}`;
   const baseRef =
     override ||
-    ((await optionalGit({ cwd, args: ['rev-parse', '--verify', remoteBase] }))
+    ((await optionalGit({
+      cwd,
+      args: ['rev-parse', '--verify', remoteBase],
+    }))
       ? remoteBase
       : candidate);
-  const base = await git({ cwd, args: ['merge-base', 'HEAD', baseRef] });
-  return { branch, defaultBranch, base, baseRef };
+  const base = await git({
+    cwd,
+    args: ['merge-base', 'HEAD', baseRef],
+  });
+  return {
+    branch,
+    defaultBranch,
+    base,
+    baseRef,
+  };
 }
-export async function pushFixes({ cwd, branch, expected }) {
-  if ((await remoteHead({ cwd, branch })) !== expected)
+export async function pushFixes({
+  cwd,
+  branch,
+  expected
+}) {
+  if (
+    (await remoteHead({
+      cwd,
+      branch,
+    })) !== expected
+  )
     throw new DeslopError(
       'PUSH',
       'Remote branch moved; deslop will not overwrite it',
     );
-  await git({ cwd, args: ['push', 'origin', `HEAD:refs/heads/${branch}`] });
+  await git({
+    cwd,
+    args: ['push', 'origin', `HEAD:refs/heads/${branch}`],
+  });
 }
-export function checkStates({ runs, statuses, names }) {
+export function checkStates({
+  runs,
+  statuses,
+  names
+}) {
   const latest = new Map();
   for (const run of [...runs].sort((a, b) => b.id - a.id)) {
     if (latest.has(run.name)) continue;
@@ -101,7 +154,13 @@ export function checkStates({ runs, statuses, names }) {
         state: status.state,
         url: status.target_url,
       });
-  return names.map((name) => latest.get(name) || { name, state: 'missing' });
+  return names.map(
+    (name) =>
+      latest.get(name) || {
+        name,
+        state: 'missing',
+      },
+  );
 }
 export const CI_TIMEOUT_MS = 3600000;
 export const CI_MISSING_MS = 180000;
@@ -128,13 +187,21 @@ export async function waitForChecks({
 }) {
   const started = Date.now();
   const deadline = started + timeoutMs;
-  let checks = names.map((name) => ({ name, state: 'missing' }));
+  let checks = names.map((name) => ({
+    name,
+    state: 'missing',
+  }));
   let lastError;
   let repo;
   while (Date.now() < deadline) {
     try {
       repo ||= await repository({ cwd });
-      checks = await readChecks({ cwd, head, names, repo });
+      checks = await readChecks({
+        cwd,
+        head,
+        names,
+        repo,
+      });
       lastError = null;
       if (
         checks.some(
@@ -165,11 +232,26 @@ export async function waitForChecks({
   return checks.map((check) =>
     FINISHED.has(check.state)
       ? check
-      : { ...check, state: `wait_timeout (${check.state})` },
+      : {
+          ...check,
+          state: `wait_timeout (${check.state})`,
+        },
   );
 }
-export async function commitStatus({ cwd, head, branch, state, description }) {
-  if ((await remoteHead({ cwd, branch })) !== head) return false;
+export async function commitStatus({
+  cwd,
+  head,
+  branch,
+  state,
+  description
+}) {
+  if (
+    (await remoteHead({
+      cwd,
+      branch,
+    })) !== head
+  )
+    return false;
   const repo = await repository({ cwd });
   await github({
     cwd,
@@ -189,7 +271,13 @@ export async function commitStatus({ cwd, head, branch, state, description }) {
   return true;
 }
 
-export async function readChecks({ cwd, head, names, repo }) {
+/** @param {{cwd: string, head: string, names: string[], repo?: string}} options */
+export async function readChecks({
+  cwd,
+  head,
+  names,
+  repo
+}) {
   repo ||= await repository({ cwd });
   const [runs, statuses] = await Promise.all([
     github({

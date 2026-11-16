@@ -1,12 +1,22 @@
 import { spawn } from 'node:child_process';
 
 export class DeslopError extends Error {
+  /** @type {string|undefined} */
+  stdout;
+  /** @type {string|undefined} */
+  stderr;
+  /** @type {number|null|undefined} */
+  status;
   constructor(code, message) {
     super(message);
     this.code = code;
   }
 }
 
+/**
+ * @param {{command: string, args?: string[], cwd?: string, input?: string, env?: NodeJS.ProcessEnv, inherit?: boolean, log?: import('node:stream').Writable, timeoutMs?: number, timeoutCode?: string}} options
+ * @returns {Promise<string>}
+ */
 export async function execute({
   command,
   args = [],
@@ -84,14 +94,22 @@ export async function execute({
       resolve(stdout.trimEnd());
     });
     child.stdin.on('error', (error) => {
-      if (error.code !== 'EPIPE') reject(error);
+      const brokenPipe = 'code' in error && error.code === 'EPIPE';
+      if (!brokenPipe) reject(error);
     });
     child.stdin.end(input);
   });
 }
 
-export async function git({ cwd, args }) {
-  return await execute({ cwd, command: 'git', args });
+export async function git({
+  cwd,
+  args
+}) {
+  return await execute({
+    cwd,
+    command: 'git',
+    args,
+  });
 }
 
 const KILL_GRACE_MS = 1000;

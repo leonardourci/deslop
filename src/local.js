@@ -17,7 +17,10 @@ function alive({ pid }) {
   }
 }
 
-export async function exclusiveRun({ file, work }) {
+export async function exclusiveRun({
+  file,
+  work
+}) {
   for (;;) {
     try {
       const fd = openSync(file, 'wx');

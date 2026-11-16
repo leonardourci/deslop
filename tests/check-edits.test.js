@@ -13,8 +13,18 @@ test('command-generated files add their required checks before proof', (t) => {
     generated: 'node -e "process.exit(1)"',
   };
   f.config.kinds = [
-    { name: 'generated', match: ['generated.js'], commands: ['generated'], checks: [] },
-    { name: 'other', match: ['**'], commands: ['generate'], checks: [] },
+    {
+      name: 'generated',
+      match: ['generated.js'],
+      commands: ['generated'],
+      checks: [],
+    },
+    {
+      name: 'other',
+      match: ['**'],
+      commands: ['generate'],
+      checks: [],
+    },
   ];
   f.config.checkFixAttempts = 0;
   f.configure();
@@ -22,7 +32,9 @@ test('command-generated files add their required checks before proof', (t) => {
   const result = f.call('run', '--reviewer', 'fixture');
   assert.equal(result.status, 1, result.stdout + result.stderr);
   const data = f.runs()[0];
-  assert.ok(data.checks.some((check) => check.name === 'generated' && !check.ok));
+  assert.ok(
+    data.checks.some((check) => check.name === 'generated' && !check.ok),
+  );
   assert.equal(f.call('status').status, 1);
   assert.equal(f.load().calls.length, 1);
 });

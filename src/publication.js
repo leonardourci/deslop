@@ -14,7 +14,12 @@ export async function publishSuccess({
       statusReason:
         'not published yet; local publication is disabled; run deslop status --publish to verify CI',
     };
-  if ((await remoteHead({ cwd, branch })) !== head)
+  if (
+    (await remoteHead({
+      cwd,
+      branch,
+    })) !== head
+  )
     return {
       published: false,
       statusReason:
@@ -30,7 +35,11 @@ export async function publishSuccess({
         'not published yet; no CI checks configured and local publication is disabled',
     };
   if (names.length) {
-    const checks = await readChecks({ cwd, head, names });
+    const checks = await readChecks({
+      cwd,
+      head,
+      names,
+    });
     const failures = checks.filter((check) => check.state !== 'success');
     if (failures.length)
       return {

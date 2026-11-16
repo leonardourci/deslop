@@ -12,7 +12,10 @@ test('kinds select unioned requirements and built-ins can be overridden per repo
   const f = fixture(t);
   writeFileSync(join(f.root, 'review.md'), 'Repo-specific review');
   const config = {
-    commands: { tests: 'npm test', lint: 'npm run lint' },
+    commands: {
+      tests: 'npm test',
+      lint: 'npm run lint',
+    },
     instructions: { code: 'review.md' },
     kinds: [
       {
@@ -28,10 +31,18 @@ test('kinds select unioned requirements and built-ins can be overridden per repo
         commands: ['lint', 'tests'],
         checks: ['UI'],
       },
-      { name: 'code', match: ['**'], commands: ['tests'], checks: ['Tests'] },
+      {
+        name: 'code',
+        match: ['**'],
+        commands: ['tests'],
+        checks: ['Tests'],
+      },
     ],
   };
-  validateConfig({ root: f.root, config });
+  validateConfig({
+    root: f.root,
+    config,
+  });
   const chosen = select({
     config,
     paths: ['web/app.js', 'src/old.js', 'docs/new.md'],
@@ -39,20 +50,39 @@ test('kinds select unioned requirements and built-ins can be overridden per repo
   assert.deepEqual(chosen.commands, ['lint', 'tests']);
   assert.deepEqual(chosen.checks, ['UI', 'Tests']);
   assert.match(
-    instructionsFor({ root: f.root, config, selection: chosen }),
+    instructionsFor({
+      root: f.root,
+      config,
+      selection: chosen,
+    }),
     /Repo-specific review/,
   );
-  assert.deepEqual(select({ config, paths: ['README.md'] }).commands, []);
+  assert.deepEqual(
+    select({
+      config,
+      paths: ['README.md'],
+    }).commands,
+    [],
+  );
   assert.throws(
     () =>
-      validateConfig({ root: f.root, config: { ...config, mode: 'local' } }),
+      validateConfig({
+        root: f.root,
+        config: {
+          ...config,
+          mode: 'local',
+        },
+      }),
     /unsupported/,
   );
   assert.throws(
     () =>
       validateConfig({
         root: f.root,
-        config: { ...config, checkFixAttempts: -1 },
+        config: {
+          ...config,
+          checkFixAttempts: -1,
+        },
       }),
     /nonnegative/,
   );
@@ -60,7 +90,10 @@ test('kinds select unioned requirements and built-ins can be overridden per repo
     () =>
       validateConfig({
         root: f.root,
-        config: { ...config, instructions: { code: 'missing' } },
+        config: {
+          ...config,
+          instructions: { code: 'missing' },
+        },
       }),
     /Missing/,
   );
@@ -69,15 +102,39 @@ test('kinds select unioned requirements and built-ins can be overridden per repo
 test('CI selects newest named checks, excludes the marker and never passes missing CI', (t) => {
   const f = fixture(t);
   const runs = [
-    { id: 1, name: 'Tests', status: 'completed', conclusion: 'success' },
-    { id: 2, name: 'Tests', status: 'in_progress' },
-    { id: 3, name: 'deslop', status: 'queued' },
+    {
+      id: 1,
+      name: 'Tests',
+      status: 'completed',
+      conclusion: 'success',
+    },
+    {
+      id: 2,
+      name: 'Tests',
+      status: 'in_progress',
+    },
+    {
+      id: 3,
+      name: 'deslop',
+      status: 'queued',
+    },
   ];
   assert.deepEqual(
-    checkStates({ runs, statuses: [], names: ['Tests', 'Missing'] }),
+    checkStates({
+      runs,
+      statuses: [],
+      names: ['Tests', 'Missing'],
+    }),
     [
-      { name: 'Tests', state: 'in_progress', url: undefined },
-      { name: 'Missing', state: 'missing' },
+      {
+        name: 'Tests',
+        state: 'in_progress',
+        url: undefined,
+      },
+      {
+        name: 'Missing',
+        state: 'missing',
+      },
     ],
   );
   const s = f.load();
@@ -87,7 +144,11 @@ test('CI selects newest named checks, excludes the marker and never passes missi
   const result = spawnSync(
     process.execPath,
     ['--input-type=module', '-e', script, f.git('rev-parse', 'HEAD')],
-    { cwd: f.root, env: f.env, encoding: 'utf8' },
+    {
+      cwd: f.root,
+      env: f.env,
+      encoding: 'utf8',
+    },
   );
   assert.equal(result.status, 1, result.stderr);
   assert.match(result.stdout, /missing/);
@@ -96,7 +157,10 @@ test('CI selects newest named checks, excludes the marker and never passes missi
 test('provider preference and per-provider model precedence support hosted Codex', () => {
   assert.equal(runningAgent({ env: { CODEX_THREAD_ID: 'hosted' } }), 'codex');
   assert.deepEqual(
-    reviewerChoices({ settings: { reviewer: ['claude', 'codex'] }, env: {} }),
+    reviewerChoices({
+      settings: { reviewer: ['claude', 'codex'] },
+      env: {},
+    }),
     ['claude', 'codex'],
   );
   assert.deepEqual(
@@ -108,17 +172,31 @@ test('provider preference and per-provider model precedence support hosted Codex
     ['custom'],
   );
   assert.throws(
-    () => reviewerChoices({ settings: {}, env: {} }),
+    () =>
+      reviewerChoices({
+        settings: {},
+        env: {},
+      }),
     /pass --reviewer/,
   );
   assert.deepEqual(
     modelChoice({
       provider: 'codex',
-      config: { reviewerModels: { codex: { model: 'repo', effort: 'high' } } },
+      config: {
+        reviewerModels: {
+          codex: {
+            model: 'repo',
+            effort: 'high',
+          },
+        },
+      },
       settings: { reviewerModels: { codex: { model: 'machine' } } },
       model: 'run',
     }),
-    { model: 'run', effort: 'high' },
+    {
+      model: 'run',
+      effort: 'high',
+    },
   );
 });
 
@@ -173,13 +251,18 @@ else console.log('[[]]');
       { mode: 0o755 },
     );
     const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)}; console.log(JSON.stringify(await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],timeoutMs:2000,pollMs:1})));`;
-    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
-      cwd: f.root,
-      env: f.env,
-      encoding: 'utf8',
-    });
+    const result = spawnSync(
+      process.execPath,
+      ['--input-type=module', '-e', script],
+      {
+        cwd: f.root,
+        env: f.env,
+        encoding: 'utf8',
+      },
+    );
     assert.equal(result.status, persistent ? 1 : 0, result.stderr);
-    if (persistent) assert.match(result.stderr, /GitHub unreachable; rerun with --local/);
+    if (persistent)
+      assert.match(result.stderr, /GitHub unreachable; rerun with --local/);
     else assert.match(result.stdout, /success/);
   });
 
@@ -189,7 +272,10 @@ test('publication policy only accepts booleans and CI-required kinds need checks
     () =>
       validateConfig({
         root: f.root,
-        config: { ...f.config, publishLocal: 'yes' },
+        config: {
+          ...f.config,
+          publishLocal: 'yes',
+        },
       }),
     /publishLocal must be boolean/,
   );
@@ -199,7 +285,12 @@ test('publication policy only accepts booleans and CI-required kinds need checks
         root: f.root,
         config: {
           ...f.config,
-          kinds: [{ ...f.config.kinds[0], ciRequired: 'yes' }],
+          kinds: [
+            {
+              ...f.config.kinds[0],
+              ciRequired: 'yes',
+            },
+          ],
         },
       }),
     /ciRequired must be boolean/,
@@ -210,7 +301,13 @@ test('publication policy only accepts booleans and CI-required kinds need checks
         root: f.root,
         config: {
           ...f.config,
-          kinds: [{ ...f.config.kinds[0], ciRequired: true, checks: [] }],
+          kinds: [
+            {
+              ...f.config.kinds[0],
+              ciRequired: true,
+              checks: [],
+            },
+          ],
         },
       }),
     /ciRequired needs CI checks/,

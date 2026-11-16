@@ -4,8 +4,7 @@ import { PassThrough } from 'node:stream';
 import { requiredValue } from '../src/prompt.js';
 
 test('missing terminal input prompts and returns the entered value', async () => {
-  const input = new PassThrough();
-  input.isTTY = true;
+  const input = Object.assign(new PassThrough(), { isTTY: true });
   const output = new PassThrough();
   let prompt = '';
   output.on('data', (chunk) => (prompt += chunk));

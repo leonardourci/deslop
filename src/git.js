@@ -3,9 +3,15 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { git } from './process.js';
 
-export async function optionalGit({ cwd, args }) {
+export async function optionalGit({
+  cwd,
+  args
+}) {
   try {
-    return await git({ cwd, args });
+    return await git({
+      cwd,
+      args,
+    });
   } catch (error) {
     if (error.code !== 'COMMAND') throw error;
     return null;
@@ -26,15 +32,29 @@ export async function dirtyPaths({ cwd }) {
   return paths;
 }
 export async function gitState({ cwd }) {
-  const branch = await git({ cwd, args: ['symbolic-ref', '--short', 'HEAD'] });
+  const branch = await git({
+    cwd,
+    args: ['symbolic-ref', '--short', 'HEAD'],
+  });
   const commands = [
     ['rev-parse', 'HEAD'],
     ['symbolic-ref', 'HEAD'],
     ['ls-files', '--stage'],
   ];
-  const values = await Promise.all(commands.map((args) => git({ cwd, args })));
+  /** @type {unknown[]} */
+  const values = await Promise.all(
+    commands.map((args) =>
+      git({
+        cwd,
+        args,
+      }),
+    ),
+  );
   const configuration =
-    (await optionalGit({ cwd, args: ['config', '--null', '--list'] })) || '';
+    (await optionalGit({
+      cwd,
+      args: ['config', '--null', '--list'],
+    })) || '';
   values.push(
     configuration
       .split('\0')
@@ -72,7 +92,10 @@ export async function gitState({ cwd }) {
   const hooks = resolve(
     cwd,
     hooksPath ||
-      (await git({ cwd, args: ['rev-parse', '--git-path', 'hooks'] })),
+      (await git({
+        cwd,
+        args: ['rev-parse', '--git-path', 'hooks'],
+      })),
   );
   if (existsSync(hooks))
     for (const name of readdirSync(hooks).sort()) {
