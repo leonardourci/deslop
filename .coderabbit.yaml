@@ -7,6 +7,7 @@ reviews:
     auto_incremental_review: false
   path_filters:
     - '!package-lock.json'
+  # Settled policy: cleanup must not weaken the blocking or coverage rules below. See .agents/skills/review/SKILL.md.
   path_instructions:
     - path: '**'
       instructions: |
