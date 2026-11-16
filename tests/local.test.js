@@ -7,14 +7,17 @@ import { join } from 'node:path';
 
 const module = new URL('../src/local.js', import.meta.url).href;
 
-function worker({ home }) {
+function worker({
+  home,
+  program = undefined
+}) {
   const call = `exclusiveRun({file:${JSON.stringify(join(home, 'deslop.lock'))},work})`;
   const child = spawn(
     process.execPath,
     [
       '--input-type=module',
       '-e',
-      `import {exclusiveRun} from ${JSON.stringify(module)};const work=async()=>{console.log('entered');process.stdin.resume();await new Promise(resolve=>process.stdin.once('end',resolve));};await ${call};`,
+      program || `import {exclusiveRun} from ${JSON.stringify(module)};const work=async()=>{console.log('entered');process.stdin.resume();await new Promise(resolve=>process.stdin.once('end',resolve));};await ${call};`,
     ],
     { stdio: ['pipe', 'pipe', 'pipe'] },
   );
@@ -127,4 +130,44 @@ test('concurrent stale-lock recovery admits one writer, including empty abandone
   await recovered.wait('entered');
   recovered.child.stdin.end();
   await recovered.done;
+});
+
+
+test('legacy migration cannot unlink an older writer that enters during inspection', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'deslop-legacy-'));
+  const {
+    writeFileSync,
+    readFileSync
+  } = await import('node:fs');
+  const { spawnSync } = await import('node:child_process');
+  const { pid } = spawnSync(process.execPath, ['-e', '']);
+  const file = join(home, 'deslop.lock');
+  writeFileSync(file, String(pid));
+  const children = [];
+  t.after(async () => {
+    for (const run of children) if (run.child.exitCode === null) run.child.kill('SIGKILL');
+    await Promise.allSettled(children.map(run => run.done));
+    rmSync(home, {
+      recursive: true,
+      force: true
+    });
+  });
+  const newcomer = worker({
+    home,
+    program: `import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';import {exclusiveRun} from ${JSON.stringify(module)};const stale=fs.readFileSync(${JSON.stringify(file)},'utf8');const read=fs.readFileSync;fs.readFileSync=(...args)=>args[0]===${JSON.stringify(file)}?stale:read(...args);const original=fs.readdirSync;fs.readdirSync=(...args)=>{try{return original(...args)}catch(error){if(args[0]===${JSON.stringify(file)}){console.log('inspected');fs.readFileSync(0,'utf8');}throw error;}};syncBuiltinESMExports();await exclusiveRun({file:${JSON.stringify(file)},work:async()=>console.log('entered')});`
+  });
+  children.push(newcomer);
+  await newcomer.wait('inspected');
+  const older = worker({
+    home,
+    program: `import fs from 'node:fs';fs.writeFileSync(${JSON.stringify(file)},String(process.pid));console.log('entered');process.stdin.resume();await new Promise(resolve=>process.stdin.once('end',resolve));`
+  });
+  children.push(older);
+  await older.wait('entered');
+  newcomer.child.stdin.end();
+  await assert.rejects(newcomer.done, /LEGACY_LOCK/);
+  assert.doesNotMatch(newcomer.output(), /entered/);
+  assert.equal(readFileSync(file, 'utf8'), String(older.child.pid));
+  older.child.stdin.end();
+  await older.done;
 });

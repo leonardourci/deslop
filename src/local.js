@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { DeslopError } from './process.js';
@@ -35,20 +35,13 @@ export async function exclusiveRun({
         } catch (readError) {
           if (readError.code === 'ENOENT') continue;
           if (readError.code !== 'ENOTDIR') throw readError;
-          try {
-            const pid = Number(readFileSync(file, 'utf8'));
-            if (alive({ pid })) throw new DeslopError('RUN_IN_PROGRESS', 'deslop is already running in this checkout');
-            // unlink cannot remove a replacement directory from the new protocol.
-            unlinkSync(file);
-          } catch (legacyError) {
-            if (!['ENOENT', 'EISDIR', 'EPERM'].includes(legacyError.code)) throw legacyError;
-          }
-          continue;
+          throw new DeslopError('LEGACY_LOCK', 'Legacy deslop lock found; stop older writers and remove it before retrying');
         }
         if (owners.some((name) => alive({ pid: Number(name.split('-')[0]) })))
           throw new DeslopError('RUN_IN_PROGRESS', 'deslop is already running in this checkout');
         try {
           for (const name of owners) unlinkSync(join(file, name));
+          if (owners.length) console.error(`Recovered deslop lock from dead owner ${owners.join(', ')}`);
           // A competing replacement contains its unique owner, so rmdir cannot remove it.
           rmdirSync(file);
         } catch (reclaimError) {

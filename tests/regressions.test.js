@@ -304,13 +304,17 @@ test('remote movement prevents pushing review fixes', (t) => {
   );
 });
 
-test('dead process checkout locks are recovered by the CLI', (t) => {
+test('legacy checkout locks fail closed without deleting an older writer', (t) => {
   const f = fixture(t);
   // A reaped child supplies an actual dead pid rather than guessing an unused one.
   const { pid } = spawnSync(process.execPath, ['-e', ''], { env: f.env });
   writeFileSync(join(f.root, '.git', 'deslop.lock'), String(pid));
   writeFileSync(join(f.root, '.git', 'deslop.lock.reclaim'), String(pid));
-  pass(f.call('run', '--reviewer', 'fixture'));
+  const result = f.call('run', '--reviewer', 'fixture');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /LEGACY_LOCK/);
+  assert.equal(readFileSync(join(f.root, '.git', 'deslop.lock'), 'utf8'), String(pid));
+  assert.equal(f.load().calls.length, 0);
 });
 
 for (const path of ['deslop.config.json', 'instructions.md'])
