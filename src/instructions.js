@@ -14,10 +14,12 @@ const aliases = {
   tests: 'audit-tests',
   writing: 'kill-ai-slop',
 };
+const testKinds = new Set(['test', 'tests']);
 const testFile = picomatch(
   [
-    '**/*.{test,spec}.{js,cjs,mjs,jsx,ts,cts,mts,tsx}',
-    '**/{test,tests,__tests__}/**/*.{js,cjs,mjs,jsx,ts,cts,mts,tsx}',
+    '**/*.{test,spec}.*',
+    '**/{test,tests,__tests__,spec,specs}/**',
+    '**/{test_*,*_test,*_spec}.*',
   ],
   { dot: true },
 );
@@ -36,7 +38,7 @@ export function defaultSkills({
     /\.(md|mdx|txt|rst|adoc)$/i.test(path)
   )
     return ['kill-ai-slop'];
-  if (['test', 'tests'].includes(kind.name) || testFile(path) || hasTests)
+  if (testKinds.has(kind.name) || testFile(path) || hasTests)
     return ['review-code', 'audit-tests', 'kill-ai-slop'];
   return ['review-code', 'kill-ai-slop'];
 }
@@ -70,5 +72,8 @@ export async function repoHasTests({
   )
     .split('\0')
     .filter(Boolean);
-  return paths.some((path) => testFile(path));
+  return paths.some((path) => {
+    const kind = config.kinds?.find((kind) => picomatch(kind.match, { dot: true })(path));
+    return testFile(path) || testKinds.has(kind?.name);
+  });
 }

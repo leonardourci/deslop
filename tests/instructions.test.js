@@ -45,6 +45,7 @@ test('a code diff without tests selects correctness and cleanup skills', () => {
 test('test files or existing tests add audit-tests to code review', () => {
   for (const options of [
     { paths: ['src/app.test.js'] },
+    { paths: ['tests/test_behavior.py'] },
     {
       paths: ['src/app.js'],
       hasTests: true,
@@ -84,7 +85,7 @@ test('repo instructions replace one default skill and can disable the others', (
   pass(f.call('run', '--reviewer', 'fixture'));
   const prompt = f.load().calls[0].prompt.split('\n\nBranch diff')[0];
   assert.match(prompt, /Repo-specific correctness rules/);
-  assert.doesNotMatch(prompt, /audit-tests:|kill-ai-slop:/);
+  assert.doesNotMatch(prompt, /audit-tests:|kill-ai-slop:|regression coverage|Judge coverage/);
 });
 
 test('machine skill overrides win over repo settings without changing the tree', (t) => {
@@ -115,18 +116,32 @@ test('machine skill overrides win over repo settings without changing the tree',
 });
 
 
-test('tracked nested test directories select an audit for a code-only diff', async (t) => {
-  const f = fixture(t);
-  const config = { commands: {} };
-  assert.equal(await repoHasTests({
-    cwd: f.root,
-    config
-  }), false);
-  mkdirSync(join(f.root, 'src/__tests__'), { recursive: true });
-  writeFileSync(join(f.root, 'src/__tests__/behavior.js'), 'export const testExists = true;');
-  f.commit();
-  assert.equal(await repoHasTests({
-    cwd: f.root,
-    config
-  }), true);
+test('existing conventional or configured test paths select a code audit', async (t) => {
+  for (const path of ['src/__tests__/behavior.js', 'tests/test_behavior.py', 'checks/behavior.py']) {
+    const f = fixture(t);
+    const detection = {
+      commands: {},
+      kinds: [{
+        name: 'tests',
+        match: ['checks/**/*.py']
+      }]
+    };
+    assert.equal(await repoHasTests({
+      cwd: f.root,
+      config: detection
+    }), false);
+    mkdirSync(join(f.root, path, '..'), { recursive: true });
+    writeFileSync(join(f.root, path), 'test fixture');
+    f.commit();
+    const hasTests = await repoHasTests({
+      cwd: f.root,
+      config: detection
+    });
+    assert.equal(hasTests, true, path);
+    assert.ok(select({
+      config,
+      paths: ['src/app.js'],
+      hasTests
+    }).instructions.includes('audit-tests'));
+  }
 });
