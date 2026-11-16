@@ -72,7 +72,7 @@ export async function gitState({ cwd }) {
   if (
     (await optionalGit({
       cwd,
-      args: ['config', '--get', 'extensions.worktreeConfig'],
+      args: ['config', '--bool', '--get', 'extensions.worktreeConfig'],
     })) === 'true'
   ) {
     const path = await git({

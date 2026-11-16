@@ -36,7 +36,10 @@ export async function repository({ cwd }) {
   return JSON.parse(
     await github({
       cwd,
-      args: ['repo', 'view', '--json', 'nameWithOwner'],
+      args: ['repo', 'view', await git({
+        cwd,
+        args: ['remote', 'get-url', 'origin']
+      }), '--json', 'nameWithOwner'],
     }),
   ).nameWithOwner;
 }
@@ -83,7 +86,7 @@ export async function branchInfo({
       const pr = JSON.parse(
         await github({
           cwd,
-          args: ['pr', 'view', '--json', 'baseRefName,state'],
+          args: ['pr', 'view', branch, '--repo', await repository({ cwd }), '--json', 'baseRefName,state'],
         }),
       );
       if (pr.state === 'OPEN') requestedBase = pr.baseRefName;
@@ -130,7 +133,11 @@ export async function pushFixes({
     );
   await git({
     cwd,
-    args: ['push', 'origin', `HEAD:refs/heads/${branch}`],
+    args: ['merge-base', '--is-ancestor', expected, 'HEAD']
+  });
+  await git({
+    cwd,
+    args: ['push', `--force-with-lease=refs/heads/${branch}:${expected}`, 'origin', `HEAD:refs/heads/${branch}`],
   });
 }
 export function checkStates({
@@ -140,26 +147,28 @@ export function checkStates({
 }) {
   const latest = new Map();
   for (const run of [...runs].sort((a, b) => b.id - a.id)) {
-    if (latest.has(run.name)) continue;
-    latest.set(run.name, {
+    if (latest.has(`run:${run.name}`)) continue;
+    latest.set(`run:${run.name}`, {
       name: run.name,
       state: run.status === 'completed' ? run.conclusion : run.status,
       url: run.details_url,
     });
   }
   for (const status of [...statuses].sort((a, b) => b.id - a.id))
-    if (!latest.has(status.context))
-      latest.set(status.context, {
+    if (!latest.has(`status:${status.context}`))
+      latest.set(`status:${status.context}`, {
         name: status.context,
         state: status.state,
         url: status.target_url,
       });
-  return names.map(
-    (name) =>
-      latest.get(name) || {
+  return names.flatMap(
+    (name) => {
+      const matches = [...latest.values()].filter((check) => check.name === name);
+      return matches.length ? matches : [{
         name,
         state: 'missing',
-      },
+      }];
+    },
   );
 }
 export const CI_TIMEOUT_MS = 3600000;

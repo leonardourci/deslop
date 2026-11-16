@@ -547,6 +547,7 @@ test('invalid agent output and unfixed items cannot create proof', (t) => {
 
 test('base override wins over an open stacked PR base and no PR falls back locally', (t) => {
   const f = fixture(t);
+  f.push();
   f.git('branch', 'parent');
   writeFileSync(join(f.root, 'later.txt'), 'later');
   f.commit();

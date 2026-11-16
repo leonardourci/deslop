@@ -140,6 +140,7 @@ test('CI selects newest named checks, excludes the marker and never passes missi
   const s = f.load();
   s.checks = [];
   f.save(s);
+  f.push();
   const script = `import { waitForChecks } from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)}; const checks=await waitForChecks({cwd:process.cwd(),head:process.argv[1],names:['Tests'],timeoutMs:150,pollMs:1});console.log(JSON.stringify(checks));if(checks.every(c=>c.state==='success'))process.exit(0);process.exit(1);`;
   const result = spawnSync(
     process.execPath,
@@ -205,6 +206,7 @@ test('missing CI checks end at their appearance limit', (t) => {
     s = f.load();
   s.checks = [];
   f.save(s);
+  f.push();
   const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)}; console.log(JSON.stringify(await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],missingMs:0,timeoutMs:2000,pollMs:1})));`;
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd: f.root,
@@ -212,7 +214,7 @@ test('missing CI checks end at their appearance limit', (t) => {
     encoding: 'utf8',
   });
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /missing/);
+  assert.equal(JSON.parse(r.stdout)[0].state, 'missing');
 });
 
 test('persistent CI API errors end red with a local rerun hint', (t) => {
@@ -224,6 +226,7 @@ if(process.argv[2]==='repo')console.log(JSON.stringify({nameWithOwner:'example/p
 `,
     { mode: 0o755 },
   );
+  f.push();
   const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)}; await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],timeoutMs:1000,pollMs:1});`;
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd: f.root,
@@ -250,7 +253,8 @@ else console.log('[[]]');
 `,
       { mode: 0o755 },
     );
-    const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)}; console.log(JSON.stringify(await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],timeoutMs:2000,pollMs:1})));`;
+    f.push();
+  const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)}; console.log(JSON.stringify(await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],timeoutMs:2000,pollMs:1})));`;
     const result = spawnSync(
       process.execPath,
       ['--input-type=module', '-e', script],
@@ -313,3 +317,27 @@ test('publication policy only accepts booleans and CI-required kinds need checks
     /ciRequired needs CI checks/,
   );
 });
+
+
+for (const state of ['failure', 'pending'])
+  test(`a same-name commit status ${state} survives a successful check run`, () => {
+    const checks = checkStates({
+      runs: [{
+        id: 2,
+        name: 'Tests',
+        status: 'completed',
+        conclusion: 'success'
+      }],
+      statuses: [{
+        id: 3,
+        context: 'Tests',
+        state
+      }, {
+        id: 1,
+        context: 'Tests',
+        state: 'success'
+      }],
+      names: ['Tests'],
+    });
+    assert.deepEqual(checks.map(check => check.state), ['success', state]);
+  });

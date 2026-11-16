@@ -3,7 +3,7 @@ import { createWriteStream, readFileSync, writeFileSync } from 'node:fs';
 import { finished } from 'node:stream/promises';
 import { join, relative } from 'node:path';
 import { lintInvocation } from './lint.js';
-import { github, waitForChecks } from './github.js';
+import { github, repository, waitForChecks } from './github.js';
 
 export function failureDetails({
   name,
@@ -144,7 +144,7 @@ export async function runChecks({
       try {
         output += await github({
           cwd,
-          args: ['run', 'view', run, '--log-failed'],
+          args: ['run', 'view', run, '--repo', await repository({ cwd }), '--log-failed'],
         });
       } catch (error) {
         output += `Cannot read failed CI logs: ${error.message}`;
