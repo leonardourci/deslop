@@ -1,0 +1,43 @@
+reviews:
+  profile: assertive
+  high_level_summary_in_walkthrough: true
+  poem: false
+  auto_review:
+    enabled: false
+    auto_incremental_review: false
+  path_filters:
+    - '!package-lock.json'
+  path_instructions:
+    - path: '**'
+      instructions: |
+        You are the challenger for this change, not a summarizer. Every review has three parts, and all three block the merge: bugs, tests and simpler. Report each, and say plainly when one has nothing to flag.
+        Part 1, bugs: try to break the change.
+        - Judge the diff against every outcome and validation claim in the PR description and docs/spec.md. Flag claims the diff does not support and changes the description leaves out.
+        - For each finding, give a concrete failure scenario: the input or state, the steps and the wrong result. Drop findings you cannot state that way.
+        - Look for races and cross-process state: checkout locks, sibling worktrees, moving local or remote heads, stale CI and git notes. A proof marker and GitHub status must describe the exact commit whose required checks passed.
+        - Look for leaks of data and permissions: what each reviewer provider can read or edit, including through symlinks and files outside the diff. Agents edit files; deslop owns checks, commits, pushes and proof. Check both local and CI-backed runs.
+        - When state moves or changes shape, check every reader. For multi-step durable writes, ask what each crash point leaves behind and what a retry does.
+        - Look for broken callers, missed edge cases, and regressions. Follow helper calls outside the diff when correctness depends on them.
+        - Flag every change under .github/workflows. A pull_request_target or workflow_run workflow must never check out, build or run code from the PR, and must keep read-only permissions with no secrets beyond the generated GITHUB_TOKEN; treat a break of this as blocking.
+        Part 2, tests: each test fails when the behaviour it covers breaks, and nothing user-facing is uncovered.
+        - For a change to behaviour, check that the PR's tests of that behaviour would fail if the change were reverted. A behaviour-preserving refactor is the exception: its tests should still pass. Name any new test of changed behaviour that would still pass, any behaviour with no test, and any test that is duplicate, cosmetic, a snapshot or tied to implementation details. A bug fix needs a test that reproduces the bug.
+        Part 3, simpler: is this the clearest way to get the result? Clear beats short; fewer lines is not the goal, and a new reader should follow the code on first read. Each finding names the replacement and what keeps working. Flag code that:
+        - copies something that already exists (name the file and line to reuse);
+        - is dead: options, flags or branches nothing uses, or wrappers with one caller;
+        - keeps the same rule or state in two places;
+        - hand-writes something the stack already provides;
+        - is hard to follow: it needs a comment to say what it does, or it is a packed one-liner, a long call chain, a clever trick or a nested condition. Three plain named steps beat one chained line.
+        A "looks off" item you cannot prove still blocks: the author either fixes it or writes in the PR why it stays.
+        - Skip what lint already covers. Apply the configured skill guidelines only within their applyTo scopes. Use review-code, audit-tests and kill-ai-slop, skipping execution steps (running checks, ticking boxes). Check meaningful changed behavior and failure paths, prefer deleting or folding redundant tests, and never chase coverage numbers or demand evidence the tool cannot produce.
+        - If a part has nothing to flag, say so plainly in one line. Do not pad the review.
+knowledge_base:
+  code_guidelines:
+    filePatterns:
+      - files: 'skills/review-code/SKILL.md'
+        applyTo: '**'
+      - files: 'skills/kill-ai-slop/SKILL.md'
+        applyTo: '**'
+      - files: 'skills/audit-tests/SKILL.md'
+        applyTo: 'src/**,eslint/**,tests/**'
+      - files: '.agents/skills/review/SKILL.md'
+        applyTo: '**'
