@@ -78,7 +78,45 @@ export function fixture(t) {
   git('switch', '-c', 'change');
   const agent = join(home, 'agent.cjs');
   const agentSource = `#!/usr/bin/env node
-const fs=require('node:fs'), cp=require('node:child_process'); const path=process.env.DESLOP_TEST_STATE; let prompt=''; process.stdin.on('data',v=>prompt+=v); process.stdin.on('end',()=>{ const state=JSON.parse(fs.readFileSync(path)); state.calls.push({prompt,args:process.argv.slice(2),model:process.env.DESLOP_REVIEWER_MODEL,effort:process.env.DESLOP_REVIEWER_EFFORT,parent:process.env.CODEX_THREAD_ID,pnyx:process.env.PNYX_TASK}); const action=state.actions.shift()||{}; if(action.edit)fs.writeFileSync('work.txt',action.edit); if(action.newFile)fs.writeFileSync(action.newFile.path,action.newFile.content); if(action.files)for(const [name,content] of Object.entries(action.files)){fs.mkdirSync(require('node:path').dirname(name),{recursive:true});fs.writeFileSync(name,content)}; if(action.config)cp.execFileSync('git',['config',...action.config]); if(action.checks)state.checks=action.checks; if(action.git)cp.execFileSync('git',['commit','--allow-empty','-m','agent must not commit']); fs.writeFileSync(path,JSON.stringify(state)); const value=action.invalid?{wrong:true}:{items:action.items||[],sessionId:'session-fixture'}; const args=process.argv.slice(2); if(args.includes('--output-last-message')){fs.writeFileSync(args[args.indexOf('--output-last-message')+1],JSON.stringify(value));console.log(JSON.stringify({type:'thread.started',thread_id:'session-fixture'}));}else if(args.includes('--output-format'))console.log(JSON.stringify({structured_output:value,session_id:'session-fixture'}));else console.log(JSON.stringify(value)); });`;
+const fs = require('node:fs');
+const cp = require('node:child_process');
+const path = process.env.DESLOP_TEST_STATE;
+let prompt = '';
+process.stdin.on('data', value => prompt += value);
+process.stdin.on('end', () => {
+  const state = JSON.parse(fs.readFileSync(path));
+  state.calls.push({
+    prompt,
+    args: process.argv.slice(2),
+    model: process.env.DESLOP_REVIEWER_MODEL,
+    effort: process.env.DESLOP_REVIEWER_EFFORT,
+    parent: process.env.CODEX_THREAD_ID,
+    pnyx: process.env.PNYX_TASK,
+  });
+  const action = state.actions.shift() || {};
+  if (action.edit) fs.writeFileSync('work.txt', action.edit);
+  if (action.newFile) fs.writeFileSync(action.newFile.path, action.newFile.content);
+  if (action.files) {
+    for (const [name, content] of Object.entries(action.files)) {
+      fs.mkdirSync(require('node:path').dirname(name), { recursive: true });
+      fs.writeFileSync(name, content);
+    }
+  }
+  if (action.config) cp.execFileSync('git', ['config', ...action.config]);
+  if (action.checks) state.checks = action.checks;
+  if (action.git) cp.execFileSync('git', ['commit', '--allow-empty', '-m', 'agent must not commit']);
+  fs.writeFileSync(path, JSON.stringify(state));
+  const value = action.invalid ? { wrong: true } : { items: action.items || [], sessionId: 'session-fixture' };
+  const args = process.argv.slice(2);
+  if (args.includes('--output-last-message')) {
+    fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], JSON.stringify(value));
+    console.log(JSON.stringify({ type: 'thread.started', thread_id: 'session-fixture' }));
+  } else if (args.includes('--output-format')) {
+    console.log(JSON.stringify({ structured_output: value, session_id: 'session-fixture' }));
+  } else {
+    console.log(JSON.stringify(value));
+  }
+});`;
   writeFileSync(agent, agentSource, { mode: 0o755 });
   writeFileSync(join(bin, 'codex'), agentSource, { mode: 0o755 });
   writeFileSync(join(bin, 'claude'), agentSource, { mode: 0o755 });
@@ -86,13 +124,39 @@ const fs=require('node:fs'), cp=require('node:child_process'); const path=proces
     join(bin, 'gh'),
     `#!/usr/bin/env node
 const fs=require('node:fs');const path=process.env.DESLOP_TEST_STATE,args=process.argv.slice(2),s=JSON.parse(fs.readFileSync(path));fs.writeFileSync(require('node:path').join(require('node:path').dirname(path),'gh-call-'+process.pid+'-'+require('node:crypto').randomUUID()),JSON.stringify(args));
-if(args[0]==='pr'){if(!s.pr){console.error('no pull request');process.exit(1)}console.log(JSON.stringify(s.pr));}
-else if(args[0]==='repo')console.log(JSON.stringify({nameWithOwner:'example/project'}));
-else if(args.includes('--method')){if(s.publicationHang){setInterval(()=>{},1000);return;}if(s.publicationOutage){console.error('GitHub unavailable');process.exit(1)}console.log('{}');}
-else if(args.some(a=>a.includes('/check-runs?'))){if(s.transientPoll&&!fs.existsSync(path+'.polled')){fs.writeFileSync(path+'.polled','1');console.error('HTTP 502: Bad Gateway');process.exit(1)}console.log(JSON.stringify([{check_runs:s.checks}]))}
-else if(args.some(a=>a.includes('/statuses?')))console.log(JSON.stringify([s.statuses||[]]));
-else if(args[0]==='run')console.log('FAIL synthetic CI failure\\nassertion failed');
-else {console.error('unexpected gh args');process.exit(2)}
+if (args[0] === 'pr') {
+  if (!s.pr) {
+    console.error('no pull request');
+    process.exit(1);
+  }
+  console.log(JSON.stringify(s.pr));
+} else if (args[0] === 'repo') {
+  console.log(JSON.stringify({ nameWithOwner: s.defaultRepo && args[2] !== s.origin ? s.defaultRepo : 'example/project' }));
+} else if (args.includes('--method')) {
+  if (s.publicationHang) {
+    setInterval(() => {}, 1000);
+    return;
+  }
+  if (s.publicationOutage) {
+    console.error('GitHub unavailable');
+    process.exit(1);
+  }
+  console.log('{}');
+} else if (args.some(a => a.includes('/check-runs?'))) {
+  if (s.transientPoll && !fs.existsSync(path + '.polled')) {
+    fs.writeFileSync(path + '.polled', '1');
+    console.error('HTTP 502: Bad Gateway');
+    process.exit(1);
+  }
+  console.log(JSON.stringify([{ check_runs: s.checks }]));
+} else if (args.some(a => a.includes('/statuses?'))) {
+  console.log(JSON.stringify([s.statuses || []]));
+} else if (args[0] === 'run') {
+  console.log('FAIL synthetic CI failure\\nassertion failed');
+} else {
+  console.error('unexpected gh args');
+  process.exit(2);
+}
 `,
     { mode: 0o755 },
   );

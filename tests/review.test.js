@@ -68,13 +68,8 @@ test('custom resumes retain the latest returned session id', async (t) => {
 });
 
 test('a provider failure after editing stops before fallback', async (t) => {
-  const cwd = mkdtempSync(join(tmpdir(), 'deslop-provider-'));
-  t.after(() =>
-    rmSync(cwd, {
-      recursive: true,
-      force: true,
-    }),
-  );
+  const f = fixture(t);
+  const cwd = f.root;
   const config = {
     reviewers: {
       first: {

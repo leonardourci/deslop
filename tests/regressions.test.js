@@ -139,6 +139,7 @@ test('sibling branch config writes during review also survive', (t) => {
 test('a transient check-runs error is retried', (t) => {
   const f = fixture(t),
     s = f.load();
+  f.push();
   s.transientPoll = true;
   f.save(s);
   const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)}; console.log(JSON.stringify(await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],pollMs:1,timeoutMs:10000})));`;
@@ -502,4 +503,63 @@ test('status publication timeouts preserve successful local proof', (t) => {
   const publication = f.call('status', '--publish');
   assert.equal(publication.status, 1);
   assert.match(publication.stdout, /proof: local git note/);
+});
+
+
+test('nonliteral true enables worktree configuration guarding', async (t) => {
+  const f = fixture(t);
+  const { gitState } = await import('../src/git.js');
+  f.git('config', 'extensions.worktreeConfig', 'yes');
+  const before = await gitState({ cwd: f.root });
+  f.git('config', '--worktree', 'unrelated.value', 'changed');
+  assert.notEqual(await gitState({ cwd: f.root }), before);
+});
+
+test('unfixed findings invalidate proof before a rejecting commit hook', (t) => {
+  const f = fixture(t);
+  f.git('config', 'core.hooksPath', '.git/hooks');
+  const hook = join(f.root, '.git/hooks/pre-commit');
+  writeFileSync(hook, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  pass(f.call('run', '--local', '--reviewer', 'fixture'));
+  const s = f.load();
+  s.actions = [{
+    edit: 'changed',
+    items: [{
+      id: 'R1',
+      where: 'work.txt',
+      problem: 'unfixed',
+      fixed: false
+    }]
+  }];
+  f.save(s);
+  assert.equal(f.call('run', '--local', '--reviewer', 'fixture').status, 1);
+  f.git('reset', '--hard', 'HEAD');
+  assert.equal(f.call('status').status, 1);
+});
+
+
+test('a remote move after push preflight cannot be overwritten', (t) => {
+  const f = fixture(t);
+  f.push();
+  const expected = f.git('rev-parse', 'HEAD');
+  const remote = join(f.home, 'remote.git');
+  const intervening = f.git('rev-parse', 'HEAD^');
+  writeFileSync(join(f.root, 'work.txt'), 'fixed');
+  f.commit();
+  rmSync(join(f.bin, 'git'));
+  writeFileSync(join(f.bin, 'git'), `#!/usr/bin/env node
+const cp=require('node:child_process');
+const args=process.argv.slice(2);
+if(args[0]==='push') cp.execFileSync(${JSON.stringify(f.gitBin)}, ['--git-dir',${JSON.stringify(remote)},'update-ref','refs/heads/change',${JSON.stringify(intervening)}]);
+const r=cp.spawnSync(${JSON.stringify(f.gitBin)},args,{stdio:'inherit'});process.exit(r.status);
+`, { mode: 0o755 });
+  const script = `import {pushFixes} from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)};await pushFixes({cwd:process.cwd(),branch:'change',expected:${JSON.stringify(expected)}});`;
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: f.root,
+    env: f.env,
+    encoding: 'utf8'
+  });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /stale info/, r.stdout + r.stderr);
+  assert.equal(f.git('ls-remote', 'origin', 'refs/heads/change').split(/\s/)[0], intervening);
 });

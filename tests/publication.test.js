@@ -214,12 +214,12 @@ for (const passName of ['initial', 'proof'])
     if (passName === 'proof') {
       writeFileSync(
         join(f.root, 'format.cjs'),
-        "require('node:fs').writeFileSync('formatted.txt','formatted')",
+        "const fs=require('node:fs');if(fs.existsSync('formatted.txt') && !fs.existsSync('failed-once.txt')){fs.writeFileSync('work.txt','bad');fs.writeFileSync('failed-once.txt','yes')}fs.writeFileSync('formatted.txt','formatted')",
       );
       f.config.commands.format = 'node format.cjs';
       f.config.kinds[0].commands = ['format', 'tests'];
     }
-    writeFileSync(join(f.root, 'work.txt'), 'bad');
+    writeFileSync(join(f.root, 'work.txt'), passName === 'proof' ? 'good' : 'bad');
     f.configure();
     f.commit();
     f.push();
@@ -268,3 +268,18 @@ for (const passName of ['initial', 'proof'])
       );
     }
   });
+
+
+test('CI and publication use origin instead of an inherited gh default', (t) => {
+  const f = fixture(t);
+  f.push();
+  const s = f.load();
+  s.defaultRepo = 'wrong/project';
+  s.origin = f.git('remote', 'get-url', 'origin');
+  f.save(s);
+  pass(f.call('run', '--reviewer', 'fixture'));
+  const calls = f.load().github;
+  assert.ok(calls.some(args => args.includes('repos/example/project/commits/' + f.git('rev-parse', 'HEAD') + '/check-runs?per_page=100')));
+  assert.ok(calls.some(args => args.includes('repos/example/project/statuses/' + f.git('rev-parse', 'HEAD'))));
+  assert.ok(calls.filter(args => args[0] === 'repo').every(args => args[2] === s.origin));
+});

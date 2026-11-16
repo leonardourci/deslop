@@ -140,6 +140,7 @@ test('a selected lint CI check prevents duplicate local lint', (t) => {
 
 test('fallback lint failures reach repair before CI waiting', (t) => {
   const f = lintFixture(t);
+  f.config.checkFixAttempts = 1;
   writeFileSync(join(f.root, 'bad.js'), 'const unused=1;');
   f.configure();
   f.commit();
@@ -149,6 +150,8 @@ test('fallback lint failures reach repair before CI waiting', (t) => {
   f.save(s);
   assert.equal(f.call('run', '--reviewer', 'fixture').status, 1);
   assert.equal(lintCheck(f).ok, false);
+  assert.equal(f.load().calls.length, 2);
+  assert.match(f.load().calls[1].prompt, /no-unused-vars/);
   assert.equal(
     f
       .load()

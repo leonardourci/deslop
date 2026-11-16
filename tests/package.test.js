@@ -33,6 +33,9 @@ test('the installed package supplies its review skills and fallback lint', (t) =
   });
   assert.notEqual(run.status, 0);
   assert.match(run.stdout, /deslop lint fail/);
+  const failure = f.runs()[0].checks.find((check) => check.name === 'deslop lint');
+  assert.match(JSON.stringify(failure.failures), /invalid\.js/);
+  assert.match(JSON.stringify(failure.failures), /deslop\/entries-on-lines/);
   const prompt = f.load().calls[0].prompt.split('\n\nBranch diff')[0];
   assert.match(prompt, /review-code:/);
   assert.match(prompt, /audit-tests:/);
