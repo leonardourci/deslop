@@ -35,7 +35,7 @@ Only failing, errored or timed-out checks resume the same Codex or Claude sessio
       "match": ["docs/**", "**/*.md"],
       "commands": [],
       "checks": [],
-      "instructions": ["writing"]
+      "instructions": ["kill-ai-slop"]
     },
     {
       "name": "code",
@@ -46,7 +46,6 @@ Only failing, errored or timed-out checks resume the same Codex or Claude sessio
   ],
   "checkFixAttempts": 1,
   "publishLocal": false,
-  "instructions": { "code": ".agents/skills/review/SKILL.md" },
   "reviewerModels": {
     "codex": { "model": "<gpt-model>", "effort": "high" },
     "claude": { "model": "<claude-model>", "effort": "high" }
@@ -56,11 +55,24 @@ Only failing, errored or timed-out checks resume the same Codex or Claude sessio
 
 `publishLocal` defaults to `false`. A kind may set `ciRequired: true` to require all of its named checks in CI, including under `--local` and when local publication is enabled. That kind needs at least one check. Local commands run first; failures resume the agent with trimmed details before any required-CI wait. Required CI starts only after every local command passes; if their final commit is not pushed, deslop ends red with a push-and-rerun hint and posts nothing to GitHub. `--local` never pushes.
 
-Each changed path uses its first matching kind; the run unions commands, checks and instructions. Renames count both paths. Unmatched paths, missing instruction files and unknown commands stop the run. Built-in instructions cover code review, test audit and plain writing; `instructions` replaces named defaults with files, and kinds can choose an instruction list. An omitted list uses all built-in defaults.
+Each changed path uses its first matching kind; the run unions commands, checks and instructions. Renames count both paths. Unmatched paths, missing instruction files and unknown commands stop the run. The shipped skills are `review-code`, `kill-ai-slop` and `audit-tests`. Code gets correctness and cleanup review; test diffs or a repository with tests also get the test audit. Docs/prose get writing cleanup. Kinds can select an explicit instruction list. Each skill can be replaced with a repo file or disabled with `false` in the root `instructions` map. Local overrides win over repo instructions, which win over shipped defaults.
 
 Machine preferences live in `$XDG_CONFIG_HOME/deslop/settings.json`, normally `~/.config/deslop/settings.json`. `reviewer` is one provider or an ordered fallback list; otherwise deslop detects the calling agent, including hosted Codex. `--reviewer` overrides it. Model/effort precedence is CLI (`--reviewer-model`, `--reviewer-effort`), machine `reviewerModels`, repo `reviewerModels`, provider default. CLI overrides apply to the primary provider; fallback providers use their own settings.
 
 Custom providers use `reviewers.<name>.command` as an argv array, receiving the prompt on stdin and returning JSON `{ "items": [{ "id": "R1", "where": "file:line", "problem": "description", "fixed": true }], "sessionId": "optional" }`. An optional `resume` argv array substitutes `{sessionId}`. Custom commands must restrict themselves to file editing; deslop refuses unexpected git-state changes.
+
+Deslop runs a fallback ESLint pass on changed JS/TS files when the selected commands and CI do not already name lint. It uses the repository's ESLint config when present, otherwise the shipped recommended and house rules: no unused variables/imports, no em dashes in strings/comments, and separate lines for multi-entry objects, patterns and type literals. Set `fallbackLint: false` to disable the fallback, including when an opaque command already lints. Repo commands/CI take precedence; fallback config precedence is repo config, then shipped default, then disabled.
+
+For machine-only skill changes, set `DESLOP_INSTRUCTIONS` to a JSON file outside the repo. Values are paths relative to that JSON file, or `false`; each entry overrides just that skill:
+
+```json
+{
+  "kill-ai-slop": "my-cleanup/SKILL.md",
+  "audit-tests": false
+}
+```
+
+The test audit checks important changed behavior as well as existing test quality. It prefers deleting or folding duplicate tests. Missing coverage matters only for real user/caller behavior, such as a new branch, failure path or boundary; it does not chase coverage numbers or demand evidence the tool cannot produce.
 
 ## Output and proof
 
@@ -83,3 +95,7 @@ Codex uses a current CLI with [permission-profile support](https://developers.op
 ## Local command edits
 
 Local checks run in order on the evolving tree. After each command, deslop commits all of its nonignored edits as `deslop: <command>`; each command has its own commit. When any command changes files, deslop runs the sequence once more as the proof pass. That pass decides the verdict by exit codes and commits its own edits the same way. Commands that still edit files in the proof pass are named as unstable in the summary. Deslop never loops until files stop changing or refuses command edits. There is no configuration option for this behavior.
+
+## Developing deslop
+
+Run `npm ci`, `npm run lint`, `npm run typecheck` and `npm test`. `npm run lint:fix` applies safe layout fixes. TypeScript checks the JavaScript through `checkJs`; source stays JavaScript. The configured deslop commands and CI run lint, type checking and tests on Node 22.13 and 24.
