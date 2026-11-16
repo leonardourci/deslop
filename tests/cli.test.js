@@ -43,6 +43,13 @@ test('checks cannot change configured hooks or enable an existing hook', (t) => 
   assert.equal(f.call('status').status, 1);
 });
 
+test('a dangling hook does not block review or proof', (t) => {
+  const f = fixture(t);
+  symlinkSync(join(f.home, 'missing-hook'), join(f.root, '.git/hooks/pre-commit'));
+  passed(f.call('run', '--reviewer', 'fixture'));
+  passed(f.call('status'));
+});
+
 test('checks cannot create worktree-specific git config after it is enabled', (t) => {
   const f = fixture(t);
   f.git('config', 'extensions.worktreeConfig', 'true');
