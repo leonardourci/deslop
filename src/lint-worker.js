@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { ESLint } from 'eslint';
 import { FlatCompat } from '@eslint/eslintrc';
 import js from '@eslint/js';
@@ -97,7 +97,9 @@ for (const {
     options = {
       cwd: dirname(config.file),
       overrideConfigFile: true,
-      overrideConfig: compat.extends(config.file),
+      overrideConfig: basename(config.file) === 'package.json'
+        ? compat.config(JSON.parse(readFileSync(config.file, 'utf8')).eslintConfig)
+        : compat.extends(config.file),
     };
   }
   const eslint = new ESLint(options);

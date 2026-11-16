@@ -110,7 +110,10 @@ export async function runChecks({
     const invocation = lintInvocation({
       cwd,
       config,
-      selection,
+      selection: {
+        ...selection,
+        commands: localCommands || selection.commands,
+      },
       paths
     });
     if (invocation) {

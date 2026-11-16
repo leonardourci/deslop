@@ -59,14 +59,21 @@ test('a repo ESLint config replaces the shipped rules', (t) => {
   assert.equal(lintCheck(f).ok, true);
 });
 
-for (const filename of ['eslint.config.mjs', '.eslintrc.json'])
+for (const filename of ['eslint.config.mjs', '.eslintrc.json', 'package.json'])
   test(`fallback lint enforces the repo rules in ${filename}`, (t) => {
     const f = lintFixture(t);
     writeFileSync(
       join(f.root, filename),
       filename.endsWith('mjs')
         ? "export default [{rules:{'no-console':'error'}}];"
-        : JSON.stringify({ rules: { 'no-console': 'error' } }),
+        : JSON.stringify(
+            filename === 'package.json'
+              ? {
+                  name: 'fixture',
+                  eslintConfig: { rules: { 'no-console': 'error' } },
+                }
+              : { rules: { 'no-console': 'error' } },
+          ),
     );
     writeFileSync(join(f.root, 'custom.js'), "console.log('demo');");
     f.configure();
@@ -146,6 +153,19 @@ test('fallback lint failures reach repair before CI waiting', (t) => {
       .github.some((args) => args.some((arg) => arg.includes('/check-runs?'))),
     false,
   );
+});
+
+test('a local lint command skipped for CI does not suppress fallback lint', (t) => {
+  const f = lintFixture(t);
+  f.config.commands.lint = 'node -e ""';
+  f.config.kinds[0].commands = ['lint', 'tests'];
+  writeFileSync(join(f.root, 'bad.js'), 'const unused=1;');
+  f.configure();
+  f.commit();
+  f.push();
+  const result = f.call('run', '--reviewer', 'fixture');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(lintCheck(f).ok, false);
 });
 
 test('optional lint CI does not suppress fallback lint under --local', (t) => {
