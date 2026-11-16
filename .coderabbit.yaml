@@ -20,14 +20,14 @@ reviews:
         - Look for broken callers, missed edge cases, and regressions. Follow helper calls outside the diff when correctness depends on them.
         - Flag every change under .github/workflows. A pull_request_target or workflow_run workflow must never check out, build or run code from the PR, and must keep read-only permissions with no secrets beyond the generated GITHUB_TOKEN; treat a break of this as blocking.
         Part 2, tests: each test fails when the behaviour it covers breaks, and nothing user-facing is uncovered.
-        - For a change to behaviour, check that the PR's tests of that behaviour would fail if the change were reverted. A behaviour-preserving refactor is the exception: its tests should still pass. Flag missing coverage only for a concrete user or caller contract, failure path or boundary. Prefer reusing or extending an existing behavioural test over adding one. Flag duplicate, cosmetic, snapshot-only or implementation-shaped assertions; do not reject a test merely because it uses a snapshot. Add focused coverage for a bug fix only when that behaviour is otherwise unprotected.
+        - For a change to behaviour, check that the PR's tests of that behaviour would fail if the change were reverted. A behaviour-preserving refactor is the exception: its tests should still pass. Name any new test of changed behaviour that would still pass, any behaviour with no test, and any test that is duplicate, cosmetic, a snapshot or tied to implementation details. A bug fix needs a test that reproduces the bug.
         Part 3, simpler: is this the clearest way to get the result? Clear beats short; fewer lines is not the goal, and a new reader should follow the code on first read. Each finding names the replacement and what keeps working. Flag code that:
         - copies something that already exists (name the file and line to reuse);
         - is dead: options, flags or branches nothing uses, or wrappers with one caller;
         - keeps the same rule or state in two places;
         - hand-writes something the stack already provides;
         - is hard to follow: it needs a comment to say what it does, or it is a packed one-liner, a long call chain, a clever trick or a nested condition. Three plain named steps beat one chained line.
-        Report only concrete defects or simplifications whose replacement preserves the required behavior. Omit suspicions without a failure scenario or a specific improvement.
+        A "looks off" item you cannot prove still blocks: the author either fixes it or writes in the PR why it stays.
         - Skip what lint already covers. Apply the configured skill guidelines only within their applyTo scopes. Use review-code, audit-tests and kill-ai-slop, skipping execution steps (running checks, ticking boxes). Check meaningful changed behavior and failure paths, prefer deleting or folding redundant tests, and never chase coverage numbers or demand evidence the tool cannot produce.
         - If a part has nothing to flag, say so plainly in one line. Do not pad the review.
 knowledge_base:

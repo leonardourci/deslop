@@ -17,3 +17,6 @@ Keep source JavaScript and use JSDoc where the type checker needs it. Follow the
 in [the README](../../../README.md#developing-deslop), on the Node versions selected by CI.
 Validate the latest commit and keep the PR's description and evidence current after later changes.
 Hydra requests the CodeRabbit challenger review; do not request it automatically.
+
+Preserve the blocking and coverage rules in [the challenger policy](../../../.coderabbit.yaml).
+Do not weaken those settled rules during cleanup.
