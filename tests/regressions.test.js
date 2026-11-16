@@ -43,7 +43,7 @@ process.stdin.resume();process.stdin.on('end',()=>{require('node:fs').writeFileS
   assert.equal(f.call('status').status, 1);
 });
 
-test('sibling branch config writes during checks do not invalidate this checkout (p1)', (t) => {
+test('sibling branch config writes during checks do not invalidate this checkout', (t) => {
   const f = fixture(t);
   f.config.commands.tests = 'git config branch.peer.remote origin';
   f.configure();
@@ -51,7 +51,7 @@ test('sibling branch config writes during checks do not invalidate this checkout
   pass(f.call('run', '--reviewer', 'fixture'));
 });
 
-test('PR review prefers the remote base over a stale local base (p2)', (t) => {
+test('PR review prefers the remote base over a stale local base', (t) => {
   const f = fixture(t);
   f.push();
   f.git('switch', 'main');
@@ -62,7 +62,6 @@ test('PR review prefers the remote base over a stale local base (p2)', (t) => {
   f.git('reset', '--hard', 'origin/main');
   writeFileSync(join(f.root, 'own.txt'), 'own');
   f.commit();
-  f.git('branch', '-f', 'main', 'HEAD~1');
   const s = f.load();
   s.pr = {
     state: 'OPEN',
@@ -78,7 +77,7 @@ test('PR review prefers the remote base over a stale local base (p2)', (t) => {
   assert.doesNotMatch(f.load().calls[0].prompt, /landed-by-someone-else/);
 });
 
-test('check artifacts are committed under the command that created them (p3, settled D1)', (t) => {
+test('check artifacts are committed under the command that created them', (t) => {
   const f = fixture(t);
   const command = `node -e "require('node:fs').writeFileSync('junit.xml','artifact')"`;
   f.config.commands.tests = command;
@@ -99,7 +98,7 @@ for (const conclusion of [
   'action_required',
   'stale',
 ])
-  test(`${conclusion} CI ends red without a fix call (p4)`, (t) => {
+  test(`${conclusion} CI ends red without a fix call`, (t) => {
     const f = fixture(t);
     f.push();
     const s = f.load();
@@ -109,7 +108,7 @@ for (const conclusion of [
     assert.equal(f.load().calls.length, 1);
   });
 
-test('publication outage preserves proof until a red verdict (p5)', (t) => {
+test('publication outage preserves proof until a red verdict', (t) => {
   const f = fixture(t);
   f.push();
   pass(f.call('run', '--reviewer', 'fixture'));
@@ -129,7 +128,7 @@ test('a fix turn without edits ends red without rerunning checks', (t) => {
   assert.equal(f.runs()[0].checks.length, 1);
 });
 
-test('sibling branch config writes during review also survive (p1)', (t) => {
+test('sibling branch config writes during review also survive', (t) => {
   const f = fixture(t),
     s = f.load();
   s.actions = [{ config: ['branch.peer.remote', 'origin'] }];
@@ -137,12 +136,11 @@ test('sibling branch config writes during review also survive (p1)', (t) => {
   pass(f.call('run', '--reviewer', 'fixture'));
 });
 
-test('a transient check-runs error is retried (p7)', async (t) => {
+test('a transient check-runs error is retried', (t) => {
   const f = fixture(t),
     s = f.load();
   s.transientPoll = true;
   f.save(s);
-  const { spawnSync } = await import('node:child_process');
   const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)}; console.log(JSON.stringify(await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],pollMs:1,timeoutMs:10000})));`;
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd: f.root,

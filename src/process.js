@@ -14,7 +14,7 @@ export class DeslopError extends Error {
 }
 
 /**
- * @param {{command: string, args?: string[], cwd?: string, input?: string, env?: NodeJS.ProcessEnv, inherit?: boolean, log?: import('node:stream').Writable, timeoutMs?: number, timeoutCode?: string}} options
+ * @param {{command: string, args?: string[], cwd?: string, input?: string, env?: NodeJS.ProcessEnv, log?: import('node:stream').Writable, timeoutMs?: number, timeoutCode?: string}} options
  * @returns {Promise<string>}
  */
 export async function execute({
@@ -23,7 +23,6 @@ export async function execute({
   cwd,
   input,
   env = process.env,
-  inherit = false,
   log,
   timeoutMs = 15 * 60 * 1000,
   timeoutCode = 'COMMAND_TIMEOUT',
@@ -33,8 +32,11 @@ export async function execute({
       cwd,
       env,
       detached: process.platform !== 'win32',
-      stdio: ['pipe', inherit ? 'inherit' : 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
+    // Decode across chunk boundaries so split multibyte characters survive.
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
     let timedOut = false;
     let escalation;
     let terminated = Promise.resolve();
@@ -60,7 +62,7 @@ export async function execute({
     }, timeoutMs);
     let stdout = '';
     let stderr = '';
-    child.stdout?.on('data', (chunk) => {
+    child.stdout.on('data', (chunk) => {
       if (log) {
         log.write(chunk);
         stdout = (stdout + chunk).slice(-4000);

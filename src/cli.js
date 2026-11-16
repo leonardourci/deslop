@@ -14,13 +14,13 @@ import {
   readJson,
   validateConfig,
   loadConfig,
+  loadSettings,
   select,
 } from './config.js';
 import { git, DeslopError } from './process.js';
 import { run } from './run.js';
 import { dirtyPaths, optionalGit } from './git.js';
 import { requiredValue } from './prompt.js';
-import { loadSettings } from './config.js';
 import { runningAgent } from './review.js';
 import { branchInfo } from './github.js';
 import { publishSuccess } from './publication.js';
@@ -306,8 +306,6 @@ export async function main({
       places,
       options,
     });
-  if (command !== 'run')
-    throw new DeslopError('USAGE', `Unknown command: ${command}`);
   if (
     !options.reviewer &&
     !loadSettings({ home: places.home }).reviewer &&

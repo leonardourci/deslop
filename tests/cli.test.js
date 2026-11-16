@@ -206,13 +206,21 @@ test('reverting a changed file during review retains its required checks', (t) =
 
 test('changed directory symlinks are reviewed without reading their targets', (t) => {
   const f = fixture(t);
+  mkdirSync(join(f.root, 'linked-directory'));
+  writeFileSync(join(f.root, 'linked-directory', 'inner.txt'), 'inside');
+  f.commit();
+  f.git('branch', 'review-base');
+  writeFileSync(join(f.home, 'inner.txt'), 'outside secret');
+  rmSync(join(f.root, 'linked-directory'), { recursive: true });
   symlinkSync(f.home, join(f.root, 'linked-directory'));
   f.commit();
-  passed(f.call('run', '--reviewer', 'fixture'));
+  passed(f.call('run', '--base', 'review-base', '--reviewer', 'fixture'));
+  const prompt = f.load().calls[0].prompt;
   assert.match(
-    f.load().calls[0].prompt,
+    prompt,
     /linked-directory: symlink or submodule; see branch diff/,
   );
+  assert.doesNotMatch(prompt, /outside secret/);
   passed(f.call('status'));
 });
 
@@ -249,7 +257,7 @@ test('commits review edits before checks and marks the final local commit withou
   const state = f.load();
   assert.equal(state.calls.length, 1);
   assert.match(state.calls[0].prompt, /No check results are supplied/);
-  assert.match(state.calls[0].prompt, /Never require|never demand/);
+  assert.match(state.calls[0].prompt, /never demand/);
   assert.equal(
     state.github.some((args) => args.includes('--method')),
     false,

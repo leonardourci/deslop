@@ -16,6 +16,17 @@ test('hung commands and their children are terminated with a timeout reason', as
   );
 });
 
+test('a multibyte character split across output chunks is decoded intact', async () => {
+  const output = await execute({
+    command: process.execPath,
+    args: [
+      '-e',
+      'process.stdout.write(Buffer.from([0xc3]));setTimeout(()=>process.stdout.write(Buffer.from([0xa9])),50)',
+    ],
+  });
+  assert.equal(output, 'é');
+});
+
 test('a failed command reports stdout when stderr is empty', async () => {
   await assert.rejects(
     execute({

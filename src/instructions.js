@@ -72,8 +72,13 @@ export async function repoHasTests({
   )
     .split('\0')
     .filter(Boolean);
-  return paths.some((path) => {
-    const kind = config.kinds?.find((kind) => picomatch(kind.match, { dot: true })(path));
-    return testFile(path) || testKinds.has(kind?.name);
-  });
+  const kinds = config.kinds.map((kind) => ({
+    name: kind.name,
+    matches: picomatch(kind.match, { dot: true }),
+  }));
+  return paths.some(
+    (path) =>
+      testFile(path) ||
+      testKinds.has(kinds.find((kind) => kind.matches(path))?.name),
+  );
 }

@@ -107,7 +107,8 @@ export async function gitState({ cwd }) {
           readFileSync(path).toString('base64'),
         ]);
       } catch (error) {
-        if (error.code !== 'EISDIR') throw error;
+        // Directories and dangling symlinks are not runnable hooks.
+        if (!['EISDIR', 'ENOENT'].includes(error.code)) throw error;
       }
     }
   return createHash('sha256').update(JSON.stringify(values)).digest('hex');

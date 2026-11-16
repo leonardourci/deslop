@@ -1,9 +1,21 @@
 import { existsSync, lstatSync, readdirSync } from 'node:fs';
-import { join, resolve, relative, sep } from 'node:path';
+import { dirname, join, resolve, relative, sep } from 'node:path';
 import { git, DeslopError } from './process.js';
 
 const INSTRUCTION_ROOTS = ['.agents', '.claude', '.codex', 'skills'];
 const split = (value) => value.split('\0').filter(Boolean);
+// Null unless the path is a regular file inside cwd, not reached through a symlinked directory.
+export function regularFile({
+  cwd,
+  path
+}) {
+  const absolute = resolve(cwd, path);
+  if (!absolute.startsWith(cwd + sep) || !existsSync(absolute)) return null;
+  if (!lstatSync(absolute).isFile()) return null;
+  for (let parent = dirname(absolute); parent !== cwd; parent = dirname(parent))
+    if (lstatSync(parent).isSymbolicLink()) return null;
+  return absolute;
+}
 export function instructionPath({
   path,
   configured = []
@@ -29,12 +41,10 @@ function projectPath({
       'EDITOR_SCOPE',
       'Git metadata and paths outside the project are not editable',
     );
-  let parent = absolute;
-  while (parent !== cwd) {
-    if (existsSync(parent) && lstatSync(parent).isSymbolicLink()) return null;
-    parent = resolve(parent, '..');
-  }
-  return absolute;
+  return regularFile({
+    cwd,
+    path,
+  });
 }
 export async function reviewScope({
   cwd,

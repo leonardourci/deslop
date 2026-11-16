@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
   existsSync,
-  lstatSync,
   mkdirSync,
   readFileSync,
   statSync,
@@ -21,6 +20,7 @@ import {
   reviewScope,
   assertInstructionScope,
   instructionPath,
+  regularFile,
 } from './scope.js';
 import { EDITOR_CONTRACT } from './editor-contract.js';
 
@@ -266,11 +266,12 @@ async function performRun({
     let contentBytes = 0;
     const files = initialPaths
       .map((path) => {
-        const absolute = resolve(cwd, path);
-        if (!absolute.startsWith(cwd + '/') || !existsSync(absolute))
-          return `${path}: removed`;
-        if (!lstatSync(absolute).isFile())
-          return `${path}: symlink or submodule; see branch diff`;
+        if (!existsSync(resolve(cwd, path))) return `${path}: removed`;
+        const absolute = regularFile({
+          cwd,
+          path,
+        });
+        if (!absolute) return `${path}: symlink or submodule; see branch diff`;
         const size = statSync(absolute).size;
         if (size > MAX_FILE_BYTES || contentBytes + size > MAX_CONTENT_BYTES)
           return `${path}: ${size} bytes; see branch diff`;

@@ -1,6 +1,5 @@
-import { existsSync, lstatSync } from 'node:fs';
-import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { regularFile } from './scope.js';
 
 /** @param {{cwd:string, config:import('./types.js').Config, selection:import('./types.js').Selection, paths:Iterable<string>}} options */
 export function lintInvocation({
@@ -19,16 +18,13 @@ export function lintInvocation({
   if (wired) return null;
   const files = Array.from(paths)
     .filter((path) => /\.[cm]?[jt]sx?$/i.test(path))
-    .map((path) => resolve(cwd, path))
-    .filter(
-      (path) => {
-        if (!path.startsWith(cwd + sep) || !existsSync(path)) return false;
-        if (!lstatSync(path).isFile()) return false;
-        for (let parent = dirname(path); parent !== cwd; parent = dirname(parent))
-          if (lstatSync(parent).isSymbolicLink()) return false;
-        return true;
-      },
-    );
+    .map((path) =>
+      regularFile({
+        cwd,
+        path,
+      }),
+    )
+    .filter(Boolean);
   if (!files.length) return null;
   return {
     command: process.execPath,

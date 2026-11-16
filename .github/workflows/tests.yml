@@ -1,15 +1,7 @@
 name: Tests
 on:
   push:
-    paths:
-      - '**'
-      - '!docs/**'
-      - '!README.md'
   pull_request:
-    paths:
-      - '**'
-      - '!docs/**'
-      - '!README.md'
 permissions:
   contents: read
 concurrency:
