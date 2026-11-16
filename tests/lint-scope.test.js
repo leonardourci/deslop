@@ -11,7 +11,10 @@ test('fallback lint excludes files reached through a directory symlink', (t) => 
   symlinkSync(f.home, join(f.root, 'linked'));
   assert.equal(lintInvocation({
     cwd: f.root,
-    config: { ...f.config, fallbackLint: true },
+    config: {
+      ...f.config,
+      fallbackLint: true
+    },
     selection: {
       kinds: [],
       commands: [],
