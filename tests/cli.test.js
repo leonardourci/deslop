@@ -10,7 +10,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fixture } from './fixtures.js';
+import { fixture, nonDefectExamples } from './fixtures.js';
 function passed(result) {
   assert.equal(result.status, 0, result.stdout + result.stderr);
 }
@@ -513,11 +513,15 @@ test('custom commands without resume get a fresh call explaining earlier commits
     {},
     {
       edit: 'good',
-      items: [finding],
+      items: [finding, {
+        ...nonDefectExamples[0],
+        kind: 'verification'
+      }],
     },
   ];
   f.save(s);
   passed(f.call('run', '--reviewer', 'fixture'));
+  assert.deepEqual(f.runs()[0].checkFixes[0].items, [finding]);
   assert.match(f.load().calls[1].prompt, /Fresh fallback call/);
   assert.deepEqual(f.load().calls[1].args, []);
 });
@@ -542,6 +546,56 @@ test('invalid agent output and unfixed items cannot create proof', (t) => {
   ];
   f.save(s);
   failed(f.call('run', '--reviewer', 'fixture'), 'UNFIXED');
+  assert.equal(f.call('status').status, 1);
+});
+
+test('reviewer non-defect notes do not block checks or proof', (t) => {
+  const f = fixture(t);
+  const s = f.load();
+  s.actions = [{ items: [
+    ...nonDefectExamples.map((item, index) => ({
+      ...item,
+      kind: index === 0 ? 'verification' : 'note'
+    })),
+    finding,
+  ] }];
+  f.save(s);
+  passed(f.call('run', '--reviewer', 'fixture'));
+  const data = f.runs()[0];
+  assert.deepEqual(data.review, {
+    found: 1,
+    fixed: 1,
+    items: [finding]
+  });
+  assert.equal(data.checks[0].ok, true);
+  passed(f.call('status'));
+});
+
+test('real unfixed defects still block proof regardless of wording or missing kind', (t) => {
+  const f = fixture(t);
+  const s = f.load();
+  const defects = [
+    'No defect found is printed even when a real finding is unfixed',
+    'Verification fails because the command exits successfully on invalid input',
+    'The reviewer ran no checks warning hides a failed required check',
+  ].map((problem, index) => ({
+    id: `R${index}`,
+    where: 'src/run.js:1',
+    problem,
+    fixed: false,
+    ...(index === 0 ? { kind: 'defect' } : {}),
+  }));
+  s.actions = [{ items: [...defects, ...nonDefectExamples.map(item => ({
+    ...item,
+    kind: 'note'
+  }))] }];
+  f.save(s);
+  failed(f.call('run', '--reviewer', 'fixture'), 'UNFIXED');
+  assert.deepEqual(f.runs()[0].review, {
+    found: defects.length,
+    fixed: 0,
+    items: defects
+  });
   assert.equal(f.call('status').status, 1);
 });
 

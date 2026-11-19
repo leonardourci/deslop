@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { review } from '../src/review.js';
-import { fixture } from './fixtures.js';
+import { fixture, nonDefectExamples } from './fixtures.js';
 
 test('Claude honors the agent timeout and reports AGENT_TIMEOUT', async (t) => {
   const f = fixture(t);
@@ -165,4 +165,39 @@ test('a hung reviewer ends with AGENT_TIMEOUT', async (t) => {
     }),
     { code: 'AGENT_TIMEOUT' },
   );
+});
+
+test('non-defect items still require valid fields, kinds and unique ids', async t => {
+  const f = fixture(t);
+  const note = {
+    ...nonDefectExamples[0],
+    kind: 'note'
+  };
+  for (const items of [
+    [{
+      ...note,
+      kind: 'unknown'
+    }],
+    [{
+      ...note,
+      kind: null
+    }],
+    [{
+      ...note,
+      fixed: 'false'
+    }],
+    [note, note],
+  ]) {
+    const config = { reviewers: { custom: {
+      command: [process.execPath, '-e', `console.log(${JSON.stringify(JSON.stringify({ items }))})`],
+    } } };
+    await assert.rejects(review({
+      cwd: f.root,
+      common: f.root,
+      choices: ['custom'],
+      config,
+      settings: {},
+      prompt: ''
+    }), { code: 'REVIEW_OUTPUT' });
+  }
 });

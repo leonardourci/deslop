@@ -51,6 +51,7 @@ const SHAPE = {
         where: 'file:line',
         problem: 'one line',
         fixed: true,
+        kind: 'defect',
       },
     ],
   },
