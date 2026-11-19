@@ -1,0 +1,59 @@
+name: Release
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  tests:
+    name: Release tests (${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        node: ['22.18.0', '24']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+  release:
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - name: Pack and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version=$(node -p 'JSON.parse(require("fs").readFileSync("package.json", "utf8")).version')
+          tag="v${version}-${GITHUB_SHA}"
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP"
+          mv "$RUNNER_TEMP/deslop-${version}.tgz" "$RUNNER_TEMP/deslop.tgz"
+          if ! gh api --method POST "repos/$GH_REPO/git/refs" \
+            -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" --silent; then
+            tag_commit=$(gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq '.object.sha')
+            if [ "$tag_commit" != "$GITHUB_SHA" ]; then
+              echo "Tag $tag does not point to $GITHUB_SHA" >&2
+              exit 1
+            fi
+          fi
+          gh release create "$tag" "$RUNNER_TEMP/deslop.tgz" \
+            --verify-tag --title "$tag" \
+            --notes "Installable package for commit ${GITHUB_SHA}." --latest
