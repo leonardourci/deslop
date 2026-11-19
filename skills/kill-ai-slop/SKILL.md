@@ -1,6 +1,6 @@
 ---
 name: kill-ai-slop
-description: Remove AI-sounding prose, em dashes, obvious comments and needless complexity from changed code and text.
+description: Remove AI-sounding prose, code comments, unasked workarounds and needless complexity from changed code and text.
 ---
 
 # Kill AI slop
@@ -19,9 +19,17 @@ Replace em dashes with the period, comma, colon or parentheses that fits. Remove
 labels, needless headings and repeated explanations. Keep lists when they make steps or comparisons
 easier to follow.
 
-Delete narrating and obvious comments, step numbers, signature paraphrases and stale claims. Keep a
-comment only when it explains a non-obvious constraint, invariant or workaround. Prefer a clearer name
-or implementation to an explanation of what the code does.
+Delete code comments by default, including doc comments on exported functions. Keep only license
+headers and type annotations a type checker reads, such as JSDoc types in JavaScript.
+
+## Workarounds
+
+Treat code-smell workarounds as defects: lint or type silencing (`eslint-disable`, `@ts-ignore`,
+`@ts-expect-error`, `as any`, or a non-null `!` used to silence the checker), empty or swallowing
+`catch` blocks, blind retries, sleeps, arbitrary timeouts and special cases hardcoded for one input.
+Fix the real cause or remove the workaround. Keep one only when the intent supplied with this review
+explicitly asks for it; put its reason in the PR description, never a code comment. With no intent
+supplied, every smell is unasked. Never judge a product behavior choice as a workaround.
 
 ## Code
 
@@ -34,7 +42,6 @@ logical assignment, unexplained defaults, bare void promises and promise chains.
 outcome, including defaults for an empty list. Declarative map/filter, independent concurrent awaits
 and clear render conditions are useful; do not replace them with loops just to look simpler.
 
-Keep errors visible. Preserve fallback values, ordering, concurrency, retries, cleanup and the message
-the caller sees. Do not add an abstraction or dependency just to make a pattern look cleaner.
-
-Use focused checks for changed behavior. A prose-only or behavior-preserving cleanup needs no new test.
+Keep errors visible. Outside the defects above, preserve fallback values, ordering, concurrency,
+cleanup and the message the caller sees. Do not add an abstraction or dependency just to make a
+pattern look cleaner.
