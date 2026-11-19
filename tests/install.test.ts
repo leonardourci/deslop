@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +17,7 @@ for (const scenario of [
   },
   {
     name: 'pinned',
-    tag: 'latest',
+    tag: 'v0.1.0-abcdef0123456789abcdef0123456789abcdef01',
     status: 0,
   },
   {
@@ -63,19 +63,21 @@ for (const scenario of [
     const downloads = join(root, 'downloads');
     mkdirSync(bin);
     mkdirSync(downloads);
-    writeFileSync(join(bin, 'curl'), `#!${process.execPath}
+    symlinkSync(process.execPath, join(bin, 'node'));
+    writeFileSync(join(bin, 'curl'), `#!/usr/bin/env node
 const fs = require('node:fs');
 const args = process.argv.slice(2);
-const api = args[1] === '${latestApi}';
+const url = args.find((arg) => arg.startsWith('https://'));
+const api = url === '${latestApi}';
 if (api) require('node:assert/strict').equal(args[args.indexOf('-H') + 1], 'Cache-Control: no-cache');
-fs.appendFileSync(process.env.INSTALL_TEST_ROOT + '/url', args[1] + '\\n');
+fs.appendFileSync(process.env.INSTALL_TEST_ROOT + '/url', url + '\\n');
 const content = api ? JSON.stringify(process.env.INSTALL_TEST_FAILURE === 'metadata' ? {} : {tag_name: '${latestTag}'}) : 'release tarball';
 const output = args[args.indexOf('-o') + 1];
 require('node:assert/strict').equal(require('node:path').dirname(require('node:path').dirname(output)), process.env.TMPDIR);
 fs.writeFileSync(output, content);
 if (process.env.INSTALL_TEST_FAILURE === (api ? 'lookup' : 'download')) process.exit(22);
 `, { mode: 0o755 });
-    writeFileSync(join(bin, 'npm'), `#!${process.execPath}
+    writeFileSync(join(bin, 'npm'), `#!/usr/bin/env node
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
 const [command, scope, archive] = process.argv.slice(2);

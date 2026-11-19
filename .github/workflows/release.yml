@@ -46,6 +46,14 @@ jobs:
           tag="v${version}-${GITHUB_SHA}"
           npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP"
           mv "$RUNNER_TEMP/deslop-${version}.tgz" "$RUNNER_TEMP/deslop.tgz"
+          if ! gh api --method POST "repos/$GH_REPO/git/refs" \
+            -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" --silent; then
+            tag_commit=$(gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq '.object.sha')
+            if [ "$tag_commit" != "$GITHUB_SHA" ]; then
+              echo "Tag $tag does not point to $GITHUB_SHA" >&2
+              exit 1
+            fi
+          fi
           gh release create "$tag" "$RUNNER_TEMP/deslop.tgz" \
-            --target "$GITHUB_SHA" --title "$tag" \
+            --verify-tag --title "$tag" \
             --notes "Installable package for commit ${GITHUB_SHA}." --latest
