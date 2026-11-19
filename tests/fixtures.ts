@@ -36,7 +36,6 @@ export function fixture(t) {
   const env: NodeJS.ProcessEnv = {
     HOME: home,
     USERPROFILE: home,
-    XDG_CONFIG_HOME: join(home, 'config'),
     GIT_CONFIG_GLOBAL: '/dev/null',
     GIT_CONFIG_NOSYSTEM: '1',
     PATH: bin,
@@ -208,10 +207,14 @@ if (args[0] === 'pr') {
       env,
       encoding: 'utf8',
     });
-  const reviews = join(home, 'deslop', 'reviews');
+  const repos = join(home, '.deslop', 'repos');
   const runs = () =>
-    readdirSync(reviews)
-      .map((name) => join(reviews, name))
+    readdirSync(repos)
+      .flatMap((repo) =>
+        readdirSync(join(repos, repo, 'reviews')).map((name) =>
+          join(repos, repo, 'reviews', name),
+        ),
+      )
       .sort((a, b) => statSync(a).mtimeMs - statSync(b).mtimeMs)
       .map((file) => JSON.parse(readFileSync(file, 'utf8')));
   const push = () => {

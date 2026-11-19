@@ -39,6 +39,7 @@ export type Places = {
   root: string;
   common: string;
   home: string;
+  repoHome: string;
   lock: string;
 };
 export type ReviewItem = {

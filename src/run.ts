@@ -6,8 +6,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { homedir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { git, DeslopError } from './process.ts';
 import { loadConfig, loadSettings, select, instructionsFor } from './config.ts';
 import { branchInfo, remoteHead, pushFixes, commitStatus } from './github.ts';
@@ -220,8 +219,8 @@ async function performRun({
     dir = join(root, 'runs', runId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(root, '.gitignore'), '*\n');
-  const file = await claimRecord({
-    cwd,
+  const file = claimRecord({
+    places,
     branch: info.branch,
     pr: info.pr?.number,
   });
@@ -690,20 +689,15 @@ function printSummary({
   );
 }
 
-async function claimRecord({
-  cwd,
+function claimRecord({
+  places,
   branch,
   pr
 }: {
-  cwd: string;
+  places: Places;
   branch: string;
   pr?: number;
 }) {
-  const origin = await optionalGit({
-    cwd,
-    args: ['remote', 'get-url', 'origin'],
-  });
-  const repo = basename(origin || cwd).replace(/\.git$/, '');
   const now = new Date();
   const date = [
     now.getFullYear(),
@@ -712,8 +706,8 @@ async function claimRecord({
   ]
     .map((part) => String(part).padStart(2, '0'))
     .join('-');
-  const stem = `${date}-${repo}-${pr ? `PR-${pr}` : branch}`.replace(/[^\w.-]+/g, '-');
-  const dir = join(homedir(), 'deslop', 'reviews');
+  const stem = `${date}-${pr ? `PR-${pr}` : branch}`.replace(/[^\w.-]+/g, '-');
+  const dir = join(places.repoHome, 'reviews');
   mkdirSync(dir, { recursive: true });
   for (let copy = 1; ; copy++) {
     const file = join(dir, copy === 1 ? `${stem}.json` : `${stem}-${copy}.json`);

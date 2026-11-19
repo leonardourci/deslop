@@ -675,8 +675,9 @@ test('the prompt opens with the intent file, else the open PR description, else 
       },
     ],
   );
-  const day = /^\d{4}-\d{2}-\d{2}-remote-/;
-  const names = readdirSync(join(f.home, 'deslop', 'reviews')).sort();
+  const day = /^\d{4}-\d{2}-\d{2}-/;
+  const reviews = join(f.home, '.deslop', 'repos', 'remote', 'reviews');
+  const names = readdirSync(reviews).sort();
   assert.ok(names.every((name) => day.test(name)), names.join(', '));
   assert.deepEqual(
     names.map((name) => name.replace(day, '')),
@@ -684,7 +685,7 @@ test('the prompt opens with the intent file, else the open PR description, else 
   );
   assert.equal(
     JSON.parse(f.git('notes', '--ref=deslop', 'show', 'HEAD')).run,
-    join(f.home, 'deslop', 'reviews', names[2]),
+    join(reviews, names[2]),
   );
 });
 
@@ -860,9 +861,9 @@ test('unavailable providers fall back with their own models rather than the prim
   };
   f.configure();
   f.commit();
-  mkdirSync(join(f.home, 'config/deslop'), { recursive: true });
+  mkdirSync(join(f.home, '.deslop'), { recursive: true });
   writeFileSync(
-    join(f.home, 'config/deslop/settings.json'),
+    join(f.home, '.deslop/settings.json'),
     JSON.stringify({ reviewer: ['missing', 'fixture'] }),
   );
   passed(
@@ -885,8 +886,8 @@ test('a concurrent HEAD change between final checks and proof cannot receive a m
     join(f.bin, 'git'),
     `#!/usr/bin/env node
 const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
-const args=process.argv.slice(2), real=${JSON.stringify(f.gitBin)}, root=${JSON.stringify(f.root)}, counter=${JSON.stringify(join(f.home, 'statuses-after-checks'))}, reviews=${JSON.stringify(join(f.home, 'deslop', 'reviews'))};
-if(args[0]==='status') { if(fs.existsSync(reviews)) { const names=fs.readdirSync(reviews); const record=names[0]&&path.join(reviews,names[0]); if(record&&JSON.parse(fs.readFileSync(record)).checks.some(check=>check.ok)) { if(!fs.existsSync(counter)){fs.writeFileSync(counter,'changed');cp.execFileSync(real,['commit','--allow-empty','-m','concurrent commit'],{cwd:root});} } } }
+const args=process.argv.slice(2), real=${JSON.stringify(f.gitBin)}, root=${JSON.stringify(f.root)}, counter=${JSON.stringify(join(f.home, 'statuses-after-checks'))}, reviews=${JSON.stringify(join(f.home, '.deslop', 'repos', 'repo', 'reviews'))};
+if(args[0]==='status') { if(fs.existsSync(reviews)) { const names=fs.readdirSync(reviews); const record=names[0]&&path.join(reviews,names[0]); const text=record?fs.readFileSync(record,'utf8'):''; if(text.startsWith('{')&&JSON.parse(text).checks.some(check=>check.ok)) { if(!fs.existsSync(counter)){fs.writeFileSync(counter,'changed');cp.execFileSync(real,['commit','--allow-empty','-m','concurrent commit'],{cwd:root});} } } }
 const result=cp.spawnSync(real,args,{stdio:'inherit'});process.exit(result.status??1);
 `,
     { mode: 0o755 },

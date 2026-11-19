@@ -29,9 +29,9 @@ process.stdin.resume();process.stdin.on('end',()=>{require('node:fs').writeFileS
 `,
     { mode: 0o755 },
   );
-  mkdirSync(join(f.home, 'config/deslop'), { recursive: true });
+  mkdirSync(join(f.home, '.deslop'), { recursive: true });
   writeFileSync(
-    join(f.home, 'config/deslop/settings.json'),
+    join(f.home, '.deslop/settings.json'),
     JSON.stringify({ reviewer: ['codex', 'fixture'] }),
   );
   const result = f.call('run');
@@ -396,7 +396,7 @@ test('clean provider failures fall back with their own model settings', (t) => {
   f.config.reviewerModels = { fixture: { model: 'fallback-model' } };
   f.configure();
   f.commit();
-  const home = join(f.home, 'config', 'deslop');
+  const home = join(f.home, '.deslop');
   mkdirSync(home, { recursive: true });
   writeFileSync(
     join(home, 'settings.json'),

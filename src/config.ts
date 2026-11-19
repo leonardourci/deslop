@@ -1,9 +1,10 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import picomatch from 'picomatch';
 import { git, DeslopError } from './process.ts';
 import { regularFile } from './scope.ts';
+import { optionalGit } from './git.ts';
 import type { Config, Kind, ModelChoice, Places, Selection, Settings } from './types.ts';
 import {
   DEFAULT_SKILLS,
@@ -230,13 +231,7 @@ function validateInstructions({
       fail(`Missing instructions file: ${name}`);
   }
 }
-export async function locations({
-  cwd,
-  env = process.env
-}: {
-  cwd: string;
-  env?: NodeJS.ProcessEnv;
-}) {
+export async function locations({ cwd }: { cwd: string }) {
   const root = await git({
     cwd,
     args: ['rev-parse', '--show-toplevel'],
@@ -245,10 +240,11 @@ export async function locations({
     cwd: root,
     args: ['rev-parse', '--path-format=absolute', '--git-common-dir'],
   });
-  const home = join(
-    env.XDG_CONFIG_HOME || join(homedir(), '.config'),
-    'deslop',
-  );
+  const origin = await optionalGit({
+    cwd: root,
+    args: ['remote', 'get-url', 'origin'],
+  });
+  const home = join(homedir(), '.deslop');
   const lock = resolve(
     root,
     await git({
@@ -260,6 +256,7 @@ export async function locations({
     root,
     common,
     home,
+    repoHome: join(home, 'repos', basename(origin || root).replace(/\.git$/, '')),
     lock,
   };
 }
@@ -330,6 +327,19 @@ export async function loadConfig({
       instructions: config.instructions,
     }),
   };
+  const localSkills = join(places.repoHome, 'skills');
+  if (existsSync(localSkills))
+    config.instructions = {
+      ...config.instructions,
+      ...instructionPaths({
+        root: localSkills,
+        instructions: Object.fromEntries(
+          readdirSync(localSkills)
+            .filter((name) => existsSync(join(localSkills, name, 'SKILL.md')))
+            .map((name) => [name, join(name, 'SKILL.md')]),
+        ),
+      }),
+    };
   if (env.DESLOP_INSTRUCTIONS) {
     const localFile = resolve(env.DESLOP_INSTRUCTIONS);
     const instructions = readJson({ path: localFile });
