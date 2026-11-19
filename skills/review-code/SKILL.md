@@ -13,4 +13,8 @@ Fix concrete defects and explain the input or state that breaks the behavior. Pr
 contracts unless the requested change alters them. Use the installed version's APIs and existing
 project mechanisms. Keep each rule in one place, and prefer a clear implementation over new scaffolding.
 
+Where the diff touches names or design, use plain domain words without abbreviations, keep the same
+name across layers and follow the project's own conventions. For data model changes, check table
+and column names, types, nullability, constraints, indexes, one source of truth and safe migrations.
+
 Judge tests with audit-tests and readability with kill-ai-slop when those skills are selected.
