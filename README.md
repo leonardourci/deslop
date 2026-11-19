@@ -2,10 +2,10 @@
 
 Deslop reviews committed work, fixes it, runs its checks and marks the final commit. It works before a pull request or push exists. A fresh agent sees the branch diff without check results and edits files; deslop owns every commit, push, check and marker.
 
-Requires Node 22.18+, Git and a signed-in Codex, Claude or configured custom agent. GitHub checks/statuses also need the signed-in `gh` CLI. Install from GitHub:
+Requires Node 22.18+, npm, Git and a signed-in Codex, Claude or configured custom agent. GitHub checks/statuses also need the signed-in `gh` CLI. Install the latest GitHub release:
 
 ```sh
-npm install -g github:leonardourci/deslop
+curl -fsSL https://raw.githubusercontent.com/leonardourci/deslop/main/docs/install.sh | sh
 deslop init --command tests="npm test" --check "Tests"
 # Commit your config and work, then:
 deslop
@@ -15,9 +15,22 @@ Apache-2.0 licensed.
 
 ## Pinned or always latest
 
-- Pinned: `npm install --save-dev github:leonardourci/deslop#<commit>`, then run `npx deslop`. The repo's lockfile keeps that commit until you change it.
-- Always latest: run `npx github:leonardourci/deslop` (for example `npx github:leonardourci/deslop clean src`). npx resolves the default branch through git on every run (checked with npm 11) and installs the newest commit when it has moved, so each run pays a git lookup, plus an install after a push.
-- Global: re-run `npm install -g github:leonardourci/deslop` to move to the newest commit. Do not use `npm update -g deslop`: it replaces this install with the unrelated `deslop` package on the npm registry.
+Each passing push to `main` publishes `deslop.tgz` under a tag `v<package version>-<full commit SHA>`.
+Published assets and tags are never replaced by the workflow. Pick a tag from [Releases](https://github.com/leonardourci/deslop/releases) to pin an install.
+
+- Global latest: rerun the installer above to update. It downloads the current latest release to a temporary folder, installs that local tarball and removes the download. It works on npm 11 and 12 without enabling remote or git dependencies.
+- Global pinned: `curl -fsSL https://raw.githubusercontent.com/leonardourci/deslop/main/docs/install.sh | sh -s -- <tag>`.
+- Pinned dev dependency: `npm install --save-dev --allow-remote=root https://github.com/leonardourci/deslop/releases/download/<tag>/deslop.tgz`, then run `npx deslop`. The tag and lockfile keep that release until you change it. With pnpm: `pnpm add --save-dev https://github.com/leonardourci/deslop/releases/download/<tag>/deslop.tgz`.
+- Direct global install: `npm install -g --allow-remote=root https://github.com/leonardourci/deslop/releases/latest/download/deslop.tgz`.
+- Run without a global install: `npx --yes --allow-remote=root https://github.com/leonardourci/deslop/releases/latest/download/deslop.tgz --help`.
+
+npx may reuse a cached URL install. To always use the latest release, run the installer before each use, then run `deslop`.
+
+npm 12 blocks remote tarball URLs by default, so direct npm/npx URL commands need `--allow-remote=root` (also accepted by npm 11). pnpm needs no such flag. The installed package uses jiti and needs no install script or build step.
+
+GitHub source installs remain an alternative: `npm install -g github:leonardourci/deslop`, `npm install --save-dev github:leonardourci/deslop#<commit>`, or `npx github:leonardourci/deslop`. npm 12 blocks these by default with `EALLOWGIT`; they require `--allow-git=root`.
+
+Do not use `npm update -g deslop`: it replaces this install with the unrelated `deslop` package on the npm registry.
 
 ## Commands
 
