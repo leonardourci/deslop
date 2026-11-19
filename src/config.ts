@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import picomatch from 'picomatch';
@@ -328,14 +328,17 @@ export async function loadConfig({
     }),
   };
   const localSkills = join(places.repoHome, 'skills');
-  if (existsSync(localSkills))
+  if (existsSync(localSkills) && statSync(localSkills).isDirectory())
     config.instructions = {
       ...config.instructions,
       ...instructionPaths({
         root: localSkills,
         instructions: Object.fromEntries(
           readdirSync(localSkills)
-            .filter((name) => existsSync(join(localSkills, name, 'SKILL.md')))
+            .filter((name) => {
+              const file = join(localSkills, name, 'SKILL.md');
+              return existsSync(file) && statSync(file).isFile();
+            })
             .map((name) => [name, join(name, 'SKILL.md')]),
         ),
       }),
