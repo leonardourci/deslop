@@ -254,6 +254,7 @@ async function main({
   const booleans = ['local', 'publish', 'help', 'version'];
   const values = [
     'base',
+    'intent',
     'reviewer',
     'reviewer-model',
     'reviewer-effort',
@@ -287,12 +288,12 @@ async function main({
   if (command === 'help') options.help = true;
   if (options.help) {
     console.log(
-      'deslop [run] [--local] [--base ref] [--reviewer provider] [--reviewer-model name] [--reviewer-effort effort]\ndeslop init [--config file | --command name=command --check name]\ndeslop status [--publish]\ndeslop shape',
+      'deslop [run] [--local] [--base ref] [--intent file] [--reviewer provider] [--reviewer-model name] [--reviewer-effort effort]\ndeslop init [--config file | --command name=command --check name]\ndeslop status [--publish]\ndeslop shape',
     );
     return;
   }
   const allowed = {
-    run: ['local', 'base', 'reviewer', 'reviewerModel', 'reviewerEffort'],
+    run: ['local', 'base', 'intent', 'reviewer', 'reviewerModel', 'reviewerEffort'],
     init: ['config', 'command', 'check'],
     status: ['publish'],
     shape: [],

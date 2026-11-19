@@ -107,22 +107,24 @@ export async function branchInfo({
       'BRANCH',
       'Switch off the default branch before running deslop',
     );
-  let requestedBase;
-  if (!override) {
-    try {
-      const pr = JSON.parse(
-        await github({
-          cwd,
-          args: ['pr', 'view', branch, '--repo', await repository({ cwd }), '--json', 'baseRefName,state'],
-        }),
-      );
-      if (pr.state === 'OPEN') requestedBase = pr.baseRefName;
-    } catch (error) {
-      if (!['COMMAND', 'COMMAND_TIMEOUT', 'ENOENT'].includes(error.code))
-        throw error;
-    }
+  let pr: {
+    number: number;
+    body: string;
+    baseRefName: string
+  } | undefined;
+  try {
+    const view = JSON.parse(
+      await github({
+        cwd,
+        args: ['pr', 'view', branch, '--repo', await repository({ cwd }), '--json', 'baseRefName,state,number,body'],
+      }),
+    );
+    if (view.state === 'OPEN') pr = view;
+  } catch (error) {
+    if (!['COMMAND', 'COMMAND_TIMEOUT', 'ENOENT'].includes(error.code))
+      throw error;
   }
-  const candidate = requestedBase || defaultBranch;
+  const candidate = (!override && pr?.baseRefName) || defaultBranch;
   const remoteBase = `origin/${candidate}`;
   const baseRef =
     override ||
@@ -141,6 +143,7 @@ export async function branchInfo({
     defaultBranch,
     base,
     baseRef,
+    pr,
   };
 }
 export async function pushFixes({

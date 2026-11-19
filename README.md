@@ -15,10 +15,12 @@ For a pinned per-repository install, use `npm install --save-dev github:leonardo
 
 ## Commands
 
-- `deslop run` (or bare `deslop`): fresh review and fixes, checks, bounded check fixes, then proof. Dirty work stops with `commit or stash your changes first`.
+- `deslop run` (or bare `deslop`): fresh review and fixes, checks, bounded check fixes, then proof. Dirty work stops with `commit or stash your changes first`. `--intent file` supplies what was asked.
 - `deslop init`: write repo config. `--command name="shell command"` and `--check "CI name"` are repeatable. `--config file` imports an existing config. Missing required values prompt in a terminal and name the missing flag otherwise. No workflow is installed.
 - `deslop status`: read the current commit's git note. `--publish` publishes its GitHub commit status if that final commit is pushed.
 - `deslop shape`: print a small example of the run JSON and identify fields that may be long.
+
+The reviewer prompt opens with the intent: the `--intent` file, otherwise the open PR's description fetched through `gh`, capped at 32 KiB. With neither, the prompt says no intent was supplied, so every code smell counts as unasked. The run record's `intent.source` is `file`, `pr` or `none`.
 
 The base is `--base`, the open PR's base, origin's default branch, or local main/master, in that order. Default-branch runs are refused. Local unpushed branches run commands without a PR. If the starting commit is pushed and selected kinds need CI, deslop pushes only its own fixes to the same branch and waits for those exact-head checks. `--local` forces local commands and keeps fixes local; kinds marked `ciRequired` still require CI on the final commit. The CI wait has a 60-minute timeout, with a three-minute appearance limit for missing checks and 15-second polling. Missing checks end red after the appearance limit. Skipped, neutral, cancelled, approval-required and stale checks end red without an agent fix call. CI polling retries transient API errors; an unreachable GitHub ends red with a `--local` hint. Deslop never merges or pushes to the default branch.
 

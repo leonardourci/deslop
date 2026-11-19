@@ -619,6 +619,45 @@ test('base override wins over an open stacked PR base and no PR falls back local
   assert.match(f.load().calls[1].prompt, /diff --git a\/work.txt/);
 });
 
+test('the prompt opens with the intent file, else the open PR description, else says none was supplied', (t) => {
+  const f = fixture(t);
+  f.push();
+  const s = f.load();
+  s.pr = {
+    state: 'OPEN',
+    baseRefName: 'main',
+    number: 7,
+    body: 'Asked: keep the retry around the flaky upstream call.',
+  };
+  f.save(s);
+  writeFileSync(join(f.home, 'intent.md'), 'Asked: rename the login field.');
+  passed(f.call('run', '--intent', join(f.home, 'intent.md'), '--reviewer', 'fixture', '--local'));
+  passed(f.call('run', '--reviewer', 'fixture', '--local'));
+  const prompts = f.load().calls.map((call) => call.prompt);
+  assert.match(prompts[0], /^Intent supplied with this review[^\n]*\nAsked: rename the login field\./);
+  assert.doesNotMatch(prompts[0], /flaky upstream/);
+  assert.match(prompts[1], /^Intent supplied with this review[^\n]*\nAsked: keep the retry/);
+  const pr = f.load();
+  delete pr.pr;
+  f.save(pr);
+  passed(f.call('run', '--reviewer', 'fixture', '--local'));
+  assert.match(f.load().calls.at(-1).prompt, /^Intent supplied with this review: none\. No intent was supplied, so every code smell is unasked\./);
+  assert.deepEqual(
+    f.runs().map((run) => run.intent).sort((a, b) => a.source.localeCompare(b.source)),
+    [
+      {
+        source: 'file',
+        path: join(f.home, 'intent.md'),
+      },
+      { source: 'none' },
+      {
+        source: 'pr',
+        pr: 7,
+      },
+    ],
+  );
+});
+
 test('init creates repo config without a workflow and shape works outside a repository', (t) => {
   const f = fixture(t);
   rmSync(join(f.root, 'deslop.config.json'));

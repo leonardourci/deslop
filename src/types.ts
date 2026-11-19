@@ -67,6 +67,7 @@ export type Scope = {
 };
 export type RunOptions = {
   base?: string;
+  intent?: string;
   local?: boolean;
   reviewer?: string;
   reviewerModel?: string;
@@ -86,6 +87,11 @@ export type Check = {
 };
 export type RunData = {
   id: string;
+  intent: {
+    source: 'file' | 'pr' | 'none';
+    path?: string;
+    pr?: number;
+  };
   verdict: string;
   initialHead: string;
   head: string;

@@ -10,7 +10,7 @@ import { join, resolve } from 'node:path';
 import { git, DeslopError } from './process.ts';
 import { loadConfig, loadSettings, select, instructionsFor } from './config.ts';
 import { branchInfo, remoteHead, pushFixes, commitStatus } from './github.ts';
-import { reviewerChoices, reviewPrompt, review } from './review.ts';
+import { reviewerChoices, reviewPrompt, review, intentSection } from './review.ts';
 import { publishSuccess } from './publication.ts';
 import { repoHasTests } from './instructions.ts';
 import { runChecks } from './checks.ts';
@@ -179,6 +179,10 @@ async function performRun({
     cwd,
     override: options.base,
   });
+  const intent = readIntent({
+    file: options.intent,
+    prBody: info.pr?.body,
+  });
   let config = loadConfig({ places });
   const settings = loadSettings({ home: places.home });
   const choices = reviewerChoices({
@@ -215,6 +219,17 @@ async function performRun({
   const file = join(dir, 'run.json');
   const data: RunData = {
     id: runId,
+    intent: !intent
+      ? { source: 'none' }
+      : options.intent
+        ? {
+            source: 'file',
+            path: resolve(options.intent),
+          }
+        : {
+            source: 'pr',
+            pr: info.pr.number,
+          },
     verdict: 'running',
     initialHead,
     head: initialHead,
@@ -311,6 +326,7 @@ async function performRun({
       settings,
       choices,
       prompt: reviewPrompt({
+        intent,
         diff,
         files,
         instructions: instructionsFor({
@@ -521,7 +537,7 @@ async function performRun({
             }),
           },
         },
-        prompt: `${EDITOR_CONTRACT}\nFix these failed checks from the same review. Instructions:\n${instructionsFor({
+        prompt: `${intentSection({ intent })}\n${EDITOR_CONTRACT}\nFix these failed checks from the same review. Instructions:\n${instructionsFor({
           root: cwd,
           config,
           selection: currentSelection
@@ -678,6 +694,27 @@ function printSummary({
 }
 
 const MAX_FILE_BYTES = 32 * 1024;
+function readIntent({
+  file,
+  prBody
+}: {
+  file?: string;
+  prBody?: string;
+}) {
+  let text = prBody;
+  if (file) {
+    try {
+      text = readFileSync(file, 'utf8');
+    } catch (error) {
+      throw new DeslopError('USAGE', `Cannot read --intent file: ${error.message}`);
+    }
+  }
+  if (!text?.trim()) return undefined;
+  const bytes = Buffer.from(text);
+  return bytes.length > MAX_FILE_BYTES
+    ? `${bytes.subarray(0, MAX_FILE_BYTES).toString('utf8')}\n[intent truncated at ${MAX_FILE_BYTES} bytes]`
+    : text;
+}
 const MAX_CONTENT_BYTES = 128 * 1024;
 async function dirtyCommitPaths({
   cwd,
