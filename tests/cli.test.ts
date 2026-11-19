@@ -539,6 +539,15 @@ test('invalid agent output and unfixed items cannot create proof', (t) => {
   failed(f.call('run', '--reviewer', 'fixture'), 'REVIEW_OUTPUT');
   assert.equal(f.call('status').status, 1);
   s = f.load();
+  s.actions = [{ items: [{
+    ...finding,
+    id: ' '
+  }] }];
+  f.save(s);
+  const blank = f.call('run', '--reviewer', 'codex');
+  failed(blank, 'REVIEW_OUTPUT');
+  assert.match(blank.stderr, /Invalid review item 1: .*"id":" "/);
+  s = f.load();
   s.actions = [
     {
       items: [

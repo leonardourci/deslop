@@ -192,6 +192,10 @@ test('non-defect items still require valid fields, kinds and unique ids', async 
     }],
     [{
       ...note,
+      severity: 'low'
+    }],
+    [{
+      ...note,
       fixed: 'false'
     }],
     [note, note],
