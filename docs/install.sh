@@ -6,9 +6,13 @@ if [ "$#" -gt 1 ]; then
   exit 2
 fi
 
-tag=${1:-latest}
+tag=${1-latest}
 case "$tag" in
   latest) url='https://github.com/leonardourci/deslop/releases/latest/download/deslop.tgz' ;;
+  ''|.|..|*[!a-zA-Z0-9._+-]*)
+    echo 'Invalid release tag' >&2
+    exit 2
+    ;;
   *) url="https://github.com/leonardourci/deslop/releases/download/$tag/deslop.tgz" ;;
 esac
 

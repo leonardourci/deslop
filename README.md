@@ -19,8 +19,8 @@ Each passing push to `main` publishes `deslop.tgz` under a tag `v<package versio
 Published assets and tags are never replaced by the workflow. Pick a tag from [Releases](https://github.com/leonardourci/deslop/releases) to pin an install.
 
 - Global latest: rerun the installer above to update. It downloads the current latest release to a temporary folder, installs that local tarball and removes the download. It works on npm 11 and 12 without enabling remote or git dependencies.
-- Global pinned: `curl -fsSL https://raw.githubusercontent.com/leonardourci/deslop/main/docs/install.sh | sh -s -- <tag>`.
-- Pinned dev dependency: `npm install --save-dev --allow-remote=root https://github.com/leonardourci/deslop/releases/download/<tag>/deslop.tgz`, then run `npx deslop`. The tag and lockfile keep that release until you change it. With pnpm: `pnpm add --save-dev https://github.com/leonardourci/deslop/releases/download/<tag>/deslop.tgz`.
+- Global pinned: replace `<tag>` with a release tag in `curl -fsSL https://raw.githubusercontent.com/leonardourci/deslop/main/docs/install.sh | sh -s -- '<tag>'`.
+- Pinned dev dependency: `npm install --save-dev --allow-remote=root 'https://github.com/leonardourci/deslop/releases/download/<tag>/deslop.tgz'`, then run `npx deslop`. With pnpm: `pnpm add --save-dev 'https://github.com/leonardourci/deslop/releases/download/<tag>/deslop.tgz'`, then run `pnpm exec deslop`.
 - Direct global install: `npm install -g --allow-remote=root https://github.com/leonardourci/deslop/releases/latest/download/deslop.tgz`.
 - Run without a global install: `npx --yes --allow-remote=root https://github.com/leonardourci/deslop/releases/latest/download/deslop.tgz --help`.
 
@@ -28,7 +28,7 @@ npx may reuse a cached URL install. To always use the latest release, run the in
 
 npm 12 blocks remote tarball URLs by default, so direct npm/npx URL commands need `--allow-remote=root` (also accepted by npm 11). pnpm needs no such flag. The installed package uses jiti and needs no install script or build step.
 
-GitHub source installs remain an alternative: `npm install -g github:leonardourci/deslop`, `npm install --save-dev github:leonardourci/deslop#<commit>`, or `npx github:leonardourci/deslop`. npm 12 blocks these by default with `EALLOWGIT`; they require `--allow-git=root`.
+GitHub source installs remain an alternative. Use `npm install -g github:leonardourci/deslop`, `npm install --save-dev 'github:leonardourci/deslop#<commit>'`, or `npx github:leonardourci/deslop`. npm 12 blocks these by default with `EALLOWGIT` and requires `--allow-git=root`.
 
 Do not use `npm update -g deslop`: it replaces this install with the unrelated `deslop` package on the npm registry.
 
