@@ -11,7 +11,13 @@ deslop init --command tests="npm test" --check "Tests"
 deslop
 ```
 
-For a pinned per-repository install, use `npm install --save-dev github:leonardourci/deslop#<commit>` and run `npx deslop`. Apache-2.0 licensed.
+Apache-2.0 licensed.
+
+### Pinned or always latest
+
+- Pinned: `npm install --save-dev github:leonardourci/deslop#<commit>`, then run `npx deslop`. The repo's lockfile keeps that commit until you change it.
+- Always latest: run `npx github:leonardourci/deslop` (for example `npx github:leonardourci/deslop clean src`). npx resolves the default branch through git on every run and installs the newest commit when it has moved; with npm 11 a second run after a push installed the new commit from the same npx cache. Each run pays a git lookup, plus an install when the branch moved.
+- Global: re-run `npm install -g github:leonardourci/deslop` to move to the newest commit. Do not use `npm update -g deslop`: it replaces this install with the unrelated `deslop` package on the npm registry.
 
 ## Commands
 
