@@ -13,7 +13,8 @@ trap 'rm -rf "$temp_dir"' 0
 trap 'exit 1' HUP INT TERM
 
 if [ "$tag" = latest ]; then
-  curl -fsSL https://api.github.com/repos/leonardourci/deslop/releases/latest -o "$temp_dir/release.json"
+  curl -fsSL https://api.github.com/repos/leonardourci/deslop/releases/latest \
+    -H 'Cache-Control: no-cache' -o "$temp_dir/release.json"
   tag=$(node -e '
     const release = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
     if (typeof release.tag_name !== "string") throw new Error("Latest release has no tag");
