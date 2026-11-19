@@ -13,7 +13,7 @@ deslop
 
 Apache-2.0 licensed.
 
-### Pinned or always latest
+## Pinned or always latest
 
 - Pinned: `npm install --save-dev github:leonardourci/deslop#<commit>`, then run `npx deslop`. The repo's lockfile keeps that commit until you change it.
 - Always latest: run `npx github:leonardourci/deslop` (for example `npx github:leonardourci/deslop clean src`). npx resolves the default branch through git on every run (checked with npm 11) and installs the newest commit when it has moved, so each run pays a git lookup, plus an install after a push.
@@ -22,7 +22,7 @@ Apache-2.0 licensed.
 ## Commands
 
 - `deslop run` (or bare `deslop`): fresh review and fixes, checks, bounded check fixes, then proof. Dirty work stops with `commit or stash your changes first`. `--intent file` supplies what was asked.
-- `deslop clean <path>...`: review and fix the whole tracked files under the given paths instead of the branch diff, then run the same checks, commits and proof as `run`. It takes the same options as `run` and is refused on the default branch. The prompt lists the file paths and the agent reads each file itself, so file size does not limit the prompt. One PR per folder keeps reviews small, but nothing enforces it.
+- `deslop clean <path>...`: review and fix every tracked file under the given paths in full instead of the branch diff, then run the same checks, commits and proof as `run`. It takes the same options as `run` and is refused on the default branch. The prompt lists the file paths and the agent reads each file itself, so file size does not limit the prompt. One PR per folder keeps reviews small, but nothing enforces it.
 - `deslop init`: write repo config. `--command name="shell command"` and `--check "CI name"` are repeatable. `--config file` imports an existing config. It also writes `.github/pull_request_template.md` with three short sections (what was asked, including any explicitly requested workaround; what changed; how it was checked) when the repo has no PR template; `--no-pr-template` skips it. The template is optional: `--intent` or any PR description works without it. Missing required values prompt in a terminal and name the missing flag otherwise. No workflow is installed.
 - `deslop status`: read the current commit's git note. `--publish` publishes its GitHub commit status if that final commit is pushed.
 - `deslop skill copy <name>`: copy a shipped skill to `.agents/skills/<name>/SKILL.md` so the repo can tweak it. It refuses when that file or the matching `.claude/skills/<name>/SKILL.md` already exists.
@@ -86,7 +86,7 @@ The test audit checks important changed behavior through the public surface, wit
 
 ## Output and proof
 
-A short summary lists the verdict, each check, findings/fixes and commits, with the path to the run record. Every run saves its record as `~/deslop/reviews/<YYYY-MM-DD>-<repo>-PR-<n>.json`, or `<YYYY-MM-DD>-<repo>-<branch>.json` when the branch has no open PR, so past reviews stay queryable. A later run for the same PR or branch on the same day gets a numeric suffix (`-2`, `-3`). `<repo>` is the origin repository name, or the checkout folder without an origin. Check logs and per-turn agent output stay in the git-ignored `.deslop/runs/<id>/` folder, and the record holds their absolute paths. JSON includes `left` paths after failures, separate `checkFixes` by turn, workflow edits, and checks with `name`, `ok`, `log` and `failures`, review counts/items, and commits. Failure excerpts have at most 20 lines; full output stays in separate logs and can be large. Use `deslop shape` before reading a large run record.
+A short summary lists the verdict, each check, findings/fixes and commits, with the path to the run record. Every run saves its record as `~/deslop/reviews/<YYYY-MM-DD>-<repo>-PR-<n>.json`, or `<YYYY-MM-DD>-<repo>-<branch>.json` when the branch has no open PR, so past reviews stay queryable. A later run for the same PR or branch on the same day gets a numeric suffix (`-2`, `-3`). `<repo>` is the origin repository name, or the checkout folder without an origin. Check logs and per-turn agent output stay in the git-ignored `.deslop/runs/<id>/` folder; each `checks[].log` in the record is an absolute path. JSON includes `left` paths after failures, separate `checkFixes` by turn, workflow edits, and checks with `name`, `ok`, `log` and `failures`, review counts/items, and commits. Failure excerpts have at most 20 lines; full output stays in separate logs and can be large. Use `deslop shape` before reading a large run record.
 
 Green checks and completed fixes add a git note under `refs/notes/deslop` to the final exact commit. The GitHub commit status is named `deslop` and requires a pushed commit. Local runs keep their proof local by default. `status --publish` checks the selected CI on that exact commit before posting success. Set `publishLocal: true` to allow local checks alone to publish success. A new commit has no proof until it passes its own run. This is an honesty record, not a signature. Failed runs have no new marker.
 

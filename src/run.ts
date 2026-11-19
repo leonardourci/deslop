@@ -187,7 +187,7 @@ async function performRun({
     file: options.intent,
     prBody: info.pr?.body,
   });
-  let config = loadConfig({ places });
+  let config = await loadConfig({ places });
   const settings = loadSettings({ home: places.home });
   const choices = reviewerChoices({
     override: options.reviewer,
@@ -350,7 +350,7 @@ async function performRun({
     });
     if (unfixed)
       throw new DeslopError('UNFIXED', 'Agent left review findings unfixed');
-    config = loadConfig({ places });
+    config = await loadConfig({ places });
     let fixes = 0,
       checkedHead,
       finalChecks,
@@ -440,7 +440,7 @@ async function performRun({
         ];
       }
       const checkedConfig = config;
-      config = loadConfig({ places });
+      config = await loadConfig({ places });
       const expandedSelection = select({
         config,
         paths: [...requiredPaths],
@@ -726,6 +726,7 @@ async function claimRecord({
   }
 }
 const MAX_FILE_BYTES = 32 * 1024;
+const MAX_CONTENT_BYTES = 128 * 1024;
 const MAX_INTENT_BYTES = 32 * 1024;
 async function branchTarget({
   cwd,
@@ -807,7 +808,6 @@ function intentRecord({
     pr,
   };
 }
-const MAX_CONTENT_BYTES = 128 * 1024;
 async function dirtyCommitPaths({
   cwd,
   commits

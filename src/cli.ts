@@ -192,10 +192,10 @@ function copySkill({
       'USAGE',
       `Use deslop skill copy <name> with one of: ${Object.keys(DEFAULT_SKILLS).join(', ')}`,
     );
-  const [target, existing] = ['.agents', '.claude'].map((folder) =>
+  const [target, claudeSkill] = ['.agents', '.claude'].map((folder) =>
     join(places.root, folder, 'skills', name, 'SKILL.md'),
   );
-  for (const file of [target, existing])
+  for (const file of [target, claudeSkill])
     if (existsSync(file))
       throw new DeslopError('SKILL_EXISTS', `${file} already exists`);
   mkdirSync(dirname(target), { recursive: true });
@@ -243,8 +243,12 @@ async function status({
     process.exitCode = 1;
     return;
   }
+  const scope =
+    marker.mode === 'clean'
+      ? `scope: deslop clean ${marker.paths.join(' ')}\n`
+      : '';
   console.log(
-    `marker: current, head ${head}${marker.mode === 'clean' ? `\nscope: deslop clean ${marker.paths.join(' ')}` : ''}\ndetails: ${marker.run}\nshape: deslop shape\nlogs: checks[].log (full logs can be large)`,
+    `marker: current, head ${head}\n${scope}details: ${marker.run}\nshape: deslop shape\nlogs: checks[].log (full logs can be large)`,
   );
   if (options.publish) {
     const branch = await git({
@@ -252,7 +256,7 @@ async function status({
       args: ['symbolic-ref', '--short', 'HEAD'],
     });
     try {
-      const config = loadConfig({ places });
+      const config = await loadConfig({ places });
       let selection;
       if (Array.isArray(marker.ciChecks) && Array.isArray(marker.requiredCI)) {
         selection = {

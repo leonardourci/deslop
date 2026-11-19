@@ -660,7 +660,7 @@ test('the prompt opens with the intent file, else the open PR description, else 
   f.save(pr);
   f.git('switch', '-c', 'feature/login');
   passed(f.call('run', '--reviewer', 'fixture', '--local'));
-  assert.match(f.load().calls.at(-1).prompt, /^Intent supplied with this review: none\. No intent was supplied, so every code smell is unasked\./);
+  assert.match(f.load().calls.at(-1).prompt, /^Intent supplied with this review: none, so every code smell is unasked\./);
   assert.deepEqual(
     f.runs().map((run) => run.intent).sort((a, b) => a.source.localeCompare(b.source)),
     [

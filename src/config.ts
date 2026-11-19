@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -283,7 +282,7 @@ export function loadSettings({ home }: { home: string }): Settings {
   validateModels({ models: settings.reviewerModels });
   return settings;
 }
-function repoSkills({ root }: { root: string }) {
+async function repoSkills({ root }: { root: string }) {
   const candidates = Object.keys(DEFAULT_SKILLS).flatMap((name) =>
     ['.agents', '.claude'].map((folder) => ({
       name,
@@ -291,10 +290,12 @@ function repoSkills({ root }: { root: string }) {
     })),
   );
   const tracked = new Set(
-    execFileSync('git', ['ls-files', '-z', '--', ...candidates.map(({ path }) => path)], {
-      cwd: root,
-      encoding: 'utf8',
-    }).split('\0'),
+    (
+      await git({
+        cwd: root,
+        args: ['ls-files', '-z', '--', ...candidates.map(({ path }) => path)],
+      })
+    ).split('\0'),
   );
   const found: Record<string, string> = {};
   for (const {
@@ -309,7 +310,7 @@ function repoSkills({ root }: { root: string }) {
   }
   return found;
 }
-export function loadConfig({
+export async function loadConfig({
   places,
   env = process.env
 }: {
@@ -323,7 +324,7 @@ export function loadConfig({
     config: readJson({ path: file }),
   });
   config.instructions = {
-    ...repoSkills({ root: places.root }),
+    ...(await repoSkills({ root: places.root })),
     ...instructionPaths({
       root: places.root,
       instructions: config.instructions,
