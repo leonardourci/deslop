@@ -4,14 +4,14 @@
   "description": "Review and fix committed work, run checks, and mark the final commit",
   "type": "module",
   "bin": {
-    "deslop": "src/cli.js"
+    "deslop": "bin/deslop.js"
   },
   "engines": {
-    "node": ">=22.13"
+    "node": ">=22.18"
   },
   "scripts": {
     "test": "node --test",
-    "deslop": "node src/cli.js run",
+    "deslop": "node src/cli.ts run",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit"
@@ -27,6 +27,7 @@
     "typescript-eslint": "8.72.2"
   },
   "files": [
+    "bin",
     "src",
     "README.md",
     "docs",
