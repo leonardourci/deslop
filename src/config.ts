@@ -281,6 +281,16 @@ export function loadSettings({ home }: { home: string }): Settings {
   validateModels({ models: settings.reviewerModels });
   return settings;
 }
+function repoSkills({ root }: { root: string }) {
+  const found: Record<string, string> = {};
+  for (const name of Object.keys(DEFAULT_SKILLS)) {
+    const file = ['.agents', '.claude']
+      .map((folder) => join(root, folder, 'skills', name, 'SKILL.md'))
+      .find((path) => existsSync(path));
+    if (file) found[name] = file;
+  }
+  return found;
+}
 export function loadConfig({
   places,
   env = process.env
@@ -294,10 +304,13 @@ export function loadConfig({
     root: places.root,
     config: readJson({ path: file }),
   });
-  config.instructions = instructionPaths({
-    root: places.root,
-    instructions: config.instructions,
-  });
+  config.instructions = {
+    ...repoSkills({ root: places.root }),
+    ...instructionPaths({
+      root: places.root,
+      instructions: config.instructions,
+    }),
+  };
   if (env.DESLOP_INSTRUCTIONS) {
     const localFile = resolve(env.DESLOP_INSTRUCTIONS);
     const instructions = readJson({ path: localFile });
