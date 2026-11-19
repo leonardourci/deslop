@@ -22,7 +22,7 @@ import {
   instructionPath,
   regularFile,
 } from './scope.ts';
-import { EDITOR_CONTRACT } from './editor-contract.ts';
+import { editorContract } from './editor-contract.ts';
 import type { Config, Places, RunData, RunOptions, Session, Settings } from './types.ts';
 
 async function cleanTree({ cwd }: { cwd: string }) {
@@ -77,6 +77,8 @@ async function agentEdits({
   turn,
   base,
   paths,
+  file,
+  save,
 }: {
   places: Places;
   options: RunOptions;
@@ -90,6 +92,8 @@ async function agentEdits({
   turn: number;
   base: string;
   paths?: string[];
+  file: string;
+  save: () => void;
 }) {
   const before = await gitState({ cwd: places.root });
   const scope = await reviewScope({
@@ -99,6 +103,7 @@ async function agentEdits({
     config,
   });
   const scopePrompt = `\nProject root: ${places.root}\nEditable tracked instruction files in this diff: ${JSON.stringify(scope.instructionFiles)}\nExisting untracked/ignored paths are excluded: ${JSON.stringify(scope.excluded)}\nNew normal source/test files are allowed; other instruction files and git metadata are not.\n`;
+  writeFileSync(file, data.findings);
   let result, failure;
   try {
     result = await review({
@@ -108,6 +113,7 @@ async function agentEdits({
       config,
       settings,
       prompt: prompt + scopePrompt,
+      findings: file,
       scope,
       session,
       model: options.reviewerModel,
@@ -116,6 +122,8 @@ async function agentEdits({
   } catch (error) {
     failure = error;
   }
+  data.findings = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  save();
   if ((await gitState({ cwd: places.root })) !== before)
     throw new DeslopError(
       'AGENT_GIT',
@@ -134,23 +142,8 @@ async function agentEdits({
       ...edited.filter((path) => path.startsWith('.github/workflows/')),
     ]),
   ];
-  writeFileSync(
-    join(dir, `review-${turn}.json`),
-    JSON.stringify(result, null, 2),
-  );
-  if (turn === 0) {
-    data.review.items = result.items;
-    data.review.found = result.items.length;
-    data.review.fixed = result.items.filter((item) => item.fixed).length;
-  } else
-    data.checkFixes.push({
-      turn,
-      items: result.items,
-    });
-  return {
-    ...result.session,
-    unfixed: result.items.some((item) => !item.fixed),
-  };
+  writeFileSync(join(dir, `agent-${turn}.log`), result.output);
+  return result.session;
 }
 export async function run({
   places,
@@ -226,6 +219,7 @@ async function performRun({
   });
   const data: RunData = {
     id: runId,
+    date: new Date().toISOString(),
     repo: cwd,
     branch: info.branch,
     pr: info.pr?.number,
@@ -240,14 +234,9 @@ async function performRun({
     initialHead,
     head: initialHead,
     checks: [],
-    review: {
-      found: 0,
-      fixed: 0,
-      items: [],
-    },
     commits: [],
-    checkFixes: [],
     newFiles: [],
+    findings: '',
   };
   if (remoteError)
     data.remoteWarning = 'origin unreachable; ran local commands';
@@ -264,7 +253,6 @@ async function performRun({
     }
   };
   const save = () => writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
-  save();
   try {
     const cleanPaths = options.paths
       ? (
@@ -321,6 +309,7 @@ async function performRun({
       prompt: reviewPrompt({
         intent,
         target,
+        findings: file,
         instructions: instructionsFor({
           root: cwd,
           config,
@@ -332,23 +321,14 @@ async function performRun({
       turn: 0,
       base: info.base,
       paths: cleanPaths,
+      file,
+      save,
     });
-    const unfixed = data.review.items.some((item) => !item.fixed);
-    if (unfixed) {
-      await invalidateVerdict({
-        head: await git({
-          cwd,
-          args: ['rev-parse', 'HEAD'],
-        }),
-      });
-    }
     await commitEdits({
       cwd,
       message: 'deslop: fix review findings',
       data,
     });
-    if (unfixed)
-      throw new DeslopError('UNFIXED', 'Agent left review findings unfixed');
     config = await loadConfig({ places });
     let fixes = 0,
       checkedHead,
@@ -523,14 +503,14 @@ async function performRun({
           ...session,
           commits: data.commits,
           context: {
-            review: data.review.items,
+            findings: data.findings,
             paths: await dirtyCommitPaths({
               cwd,
               commits: data.commits,
             }),
           },
         },
-        prompt: `${intentSection({ intent })}\n${EDITOR_CONTRACT}\nFix these failed checks from the same review. Instructions:\n${instructionsFor({
+        prompt: `${intentSection({ intent })}\n${editorContract({ findings: file })}\nFix these failed checks from the same review. Instructions:\n${instructionsFor({
           root: cwd,
           config,
           selection: currentSelection
@@ -547,6 +527,8 @@ async function performRun({
         turn: fixes,
         base: info.base,
         paths: cleanPaths,
+        file,
+        save,
       });
       const edited = await dirtyPaths({ cwd });
       const protectedPaths = new Set(
@@ -577,8 +559,6 @@ async function performRun({
           'NO_FIX',
           'Agent made no changes for the failed checks',
         );
-      if (session.unfixed)
-        throw new DeslopError('UNFIXED', 'Agent left check fixes unresolved');
     }
     await cleanTree({ cwd });
     data.head = await git({
@@ -592,7 +572,6 @@ async function performRun({
       version: 1,
       head: data.head,
       verdict: 'passed',
-      review: data.review,
       checks: finalChecks,
       mode: data.mode,
       paths: data.paths,
@@ -674,16 +653,20 @@ function printSummary({
     );
   for (const check of data.checks)
     console.log(`check: ${check.name} ${check.ok ? 'pass' : 'fail'}`);
-  console.log(`review: found ${data.review.found}, fixed ${data.review.fixed}`);
+  const findings = data.findings.trim();
+  const lines = findings.split('\n').length;
+  console.log(
+    !findings
+      ? 'findings: none'
+      : lines > MAX_SUMMARY_LINES
+        ? `findings: ${lines} lines; read findings in ${path}`
+        : `findings:\n${findings}`,
+  );
   if (data.left?.length) console.log(`left: ${data.left.join(', ')}`);
   if (data.unstableCommands?.length)
     console.log(`unstable commands: ${data.unstableCommands.join(', ')}`);
   if (data.workflowEdits?.length)
     console.log(`workflows: ${data.workflowEdits.join(', ')}`);
-  for (const item of data.review.items)
-    console.log(
-      `review: ${item.id} ${item.fixed ? 'fixed' : 'unfixed'} ${item.problem.replaceAll('\n', ' ').slice(0, 240)}`,
-    );
   console.log(
     `commits: ${data.commits.join(', ') || 'none'}${data.unpushed ? ' (local, not pushed)' : ''}\ndetails: ${path}\nshape: deslop shape\nlogs: checks[].log (full logs can be large)`,
   );
@@ -719,6 +702,7 @@ function claimRecord({
     }
   }
 }
+const MAX_SUMMARY_LINES = 20;
 const MAX_FILE_BYTES = 32 * 1024;
 const MAX_CONTENT_BYTES = 128 * 1024;
 const MAX_INTENT_BYTES = 32 * 1024;

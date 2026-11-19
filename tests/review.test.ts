@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { review } from '../src/review.ts';
-import { fixture, nonDefectExamples } from './fixtures.ts';
+import { fixture } from './fixtures.ts';
 
 test('Claude honors the agent timeout and reports AGENT_TIMEOUT', async (t) => {
   const f = fixture(t);
@@ -21,6 +21,7 @@ test('Claude honors the agent timeout and reports AGENT_TIMEOUT', async (t) => {
       config: f.config,
       settings: {},
       prompt: '',
+      findings: join(f.home, 'findings.txt'),
       env: f.env,
       timeoutMs: 100,
     }),
@@ -37,7 +38,7 @@ test('custom resumes retain the latest returned session id', async (t) => {
     }),
   );
   const script =
-    "console.log(JSON.stringify({items:[],sessionId:process.argv[1]+'-next'}))";
+    "console.log(JSON.stringify({sessionId:process.argv[1]+'-next'}))";
   const config = {
     reviewers: {
       custom: {
@@ -53,6 +54,7 @@ test('custom resumes retain the latest returned session id', async (t) => {
     config,
     settings: {},
     prompt: '',
+    findings: join(cwd, 'findings.txt'),
   };
   const first = await review(args);
   const second = await review({
@@ -83,7 +85,7 @@ test('a provider failure after editing stops before fallback', async (t) => {
         command: [
           process.execPath,
           '-e',
-          "require('node:fs').writeFileSync('work.txt', 'fallback'); console.log(JSON.stringify({items:[]}))",
+          "require('node:fs').writeFileSync('work.txt', 'fallback'); console.log('done')",
         ],
       },
     },
@@ -96,6 +98,7 @@ test('a provider failure after editing stops before fallback', async (t) => {
       config,
       settings: {},
       prompt: '',
+      findings: join(f.home, 'findings.txt'),
     }),
     { code: 'COMMAND' },
   );
@@ -116,7 +119,7 @@ test('a custom provider without a session id receives prior-edit context', async
         command: [
           process.execPath,
           '-e',
-          "let input=''; process.stdin.on('data', chunk=>input+=chunk); process.stdin.on('end',()=>console.log(JSON.stringify({items:[{id:'R1',where:'prompt',problem:input,fixed:true,kind:'defect'}]})))",
+          "process.stdin.pipe(process.stdout)",
         ],
         resume: ['unused', '{sessionId}'],
       },
@@ -129,13 +132,14 @@ test('a custom provider without a session id receives prior-edit context', async
     config,
     settings: {},
     prompt: 'Fix failures',
+    findings: join(cwd, 'findings.txt'),
     session: {
       provider: 'custom',
       commits: ['previous-commit'],
     },
   });
   assert.match(
-    result.items[0].problem,
+    result.output,
     /prior edits were committed as previous-commit/,
   );
 });
@@ -161,55 +165,9 @@ test('a hung reviewer ends with AGENT_TIMEOUT', async (t) => {
       config,
       settings: {},
       prompt: '',
+      findings: join(cwd, 'findings.txt'),
       timeoutMs: 100,
     }),
     { code: 'AGENT_TIMEOUT' },
   );
-});
-
-test('non-defect items still require valid fields, kinds and unique ids', async t => {
-  const f = fixture(t);
-  const note = {
-    ...nonDefectExamples[0],
-    kind: 'note'
-  };
-  for (const items of [
-    [{
-      ...note,
-      kind: 'unknown'
-    }],
-    [{
-      ...note,
-      kind: null
-    }],
-    [{
-      ...note,
-      kind: undefined
-    }],
-    [{
-      ...note,
-      id: ' '
-    }],
-    [{
-      ...note,
-      severity: 'low'
-    }],
-    [{
-      ...note,
-      fixed: 'false'
-    }],
-    [note, note],
-  ]) {
-    const config = { reviewers: { custom: {
-      command: [process.execPath, '-e', `console.log(${JSON.stringify(JSON.stringify({ items }))})`],
-    } } };
-    await assert.rejects(review({
-      cwd: f.root,
-      common: f.root,
-      choices: ['custom'],
-      config,
-      settings: {},
-      prompt: ''
-    }), { code: 'REVIEW_OUTPUT' });
-  }
 });

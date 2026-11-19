@@ -61,7 +61,7 @@ export async function publishSuccess({
       head,
       branch,
       state: 'success',
-      description: 'Review fixed and checks passed',
+      description: 'Reviewed and checks passed',
     }),
   };
 }

@@ -1,2 +1,3 @@
-export const EDITOR_CONTRACT =
-  'Review and edit files only. Never run checks, commit, stage, push, merge, change branches, edit git state or delegate. Deslop owns all commands, git operations and markers. Fix what you find and return JSON with items: [{id, where, problem, fixed, kind}]. Set kind to "defect" for findings, "note" for no-defect observations, or "verification" for check-execution notes.';
+export function editorContract({ findings }: { findings: string }) {
+  return `Review and edit files only. Never run checks, commit, stage, push, merge, change branches, edit git state or delegate. Deslop owns all commands, git operations and markers. Fix every finding. Add all of your findings, as plain text in any form, to the end of ${findings}, keeping what it already holds; you may edit that file even though it is outside the project.`;
+}

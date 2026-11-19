@@ -59,6 +59,7 @@ function hasPrTemplate({ root }: { root: string }) {
 
 const SHAPE = {
   id: 'run id',
+  date: '2026-01-31T12:00:00.000Z',
   repo: '/path/to/repo',
   branch: 'branch',
   pr: 12,
@@ -84,27 +85,9 @@ const SHAPE = {
       ],
     },
   ],
-  review: {
-    found: 1,
-    fixed: 1,
-    items: [
-      {
-        id: 'R1',
-        where: 'file:line',
-        problem: 'one line',
-        fixed: true,
-        kind: 'defect',
-      },
-    ],
-  },
   commits: ['commit'],
   newFiles: ['new.test.js'],
-  checkFixes: [
-    {
-      turn: 1,
-      items: [],
-    },
-  ],
+  findings: 'the agent findings text, verbatim',
   left: ['uncommitted.txt'],
   unstableCommands: ['pnpm lint:fix'],
 };
@@ -233,11 +216,7 @@ async function status({
     marker.head === head &&
     marker.verdict === 'passed' &&
     Array.isArray(marker.checks) &&
-    marker.checks.every((check) => check?.ok === true) &&
-    marker.review &&
-    Number.isInteger(marker.review.found) &&
-    marker.review.found >= 0 &&
-    marker.review.found === marker.review.fixed;
+    marker.checks.every((check) => check?.ok === true);
   if (!valid) {
     console.log(`marker: missing or stale, head ${head}`);
     process.exitCode = 1;
@@ -391,7 +370,7 @@ async function main({
   if (command === 'shape') {
     console.log(JSON.stringify(SHAPE, null, 2));
     console.log(
-      'Potentially long: checks[], checks[].failures[], review.items[], commits[]. Excerpts <=20 lines. Full logs can be large.',
+      'Potentially long: findings, checks[], checks[].failures[], commits[]. Excerpts <=20 lines. Full logs can be large.',
     );
     return;
   }
