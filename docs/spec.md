@@ -50,7 +50,7 @@ For uncommitted machine preferences, `DESLOP_INSTRUCTIONS` points to a JSON map 
 
 ## Lint and type checking
 
-Deslop's own source remains JavaScript. ESLint runs its recommended rules plus house rules: an object literal, destructuring pattern, type literal or interface with two or more entries puts each entry on its own line; unused variables/imports and em dashes in strings/comments are errors. `npm run lint` checks them and `npm run lint:fix` fixes layout. `npm run typecheck` runs `tsc --noEmit` with `checkJs` over source, shipped lint code and tests, using JSDoc where needed. Deslop's config and both Node CI jobs run lint, type checking and tests.
+Deslop's own source and tests are TypeScript that Node runs without a build step by stripping types, so they use only erasable syntax and `.ts` import paths. Node refuses to strip types under `node_modules`, so the installed command and the fallback lint worker start from plain JavaScript entries in `bin/` that load the TypeScript through jiti, with no install-time build. ESLint runs its recommended rules plus house rules: an object literal, destructuring pattern, type literal or interface with two or more entries puts each entry on its own line; unused variables/imports and em dashes in strings/comments are errors. `npm run lint` checks them and `npm run lint:fix` fixes layout. `npm run typecheck` runs `tsc --noEmit` over source, shipped lint code and tests. Deslop's config and both Node CI jobs run lint, type checking and tests.
 
 For reviewed repos, lint precedence is:
 
