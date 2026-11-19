@@ -66,6 +66,7 @@ export type Scope = {
   configured: string[];
 };
 export type RunOptions = {
+  paths?: string[];
   base?: string;
   intent?: string;
   local?: boolean;
@@ -90,6 +91,8 @@ export type RunData = {
   repo: string;
   branch: string;
   pr?: number;
+  mode: 'run' | 'clean';
+  paths?: string[];
   intent: {
     source: 'file' | 'pr' | 'none';
     path?: string;

@@ -59,17 +59,21 @@ function projectPath({
 export async function reviewScope({
   cwd,
   base,
+  paths,
   config
 }: {
   cwd: string;
   base: string;
+  paths?: string[];
   config: Config;
 }) {
   const [diff, tracked, ignored, untracked] = await Promise.all([
-    git({
-      cwd,
-      args: ['diff', '--name-only', '--no-renames', '-z', base, 'HEAD'],
-    }),
+    paths
+      ? paths.join('\0')
+      : git({
+          cwd,
+          args: ['diff', '--name-only', '--no-renames', '-z', base, 'HEAD'],
+        }),
     git({
       cwd,
       args: ['ls-files', '-z'],

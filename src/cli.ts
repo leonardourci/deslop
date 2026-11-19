@@ -37,6 +37,8 @@ const SHAPE = {
   repo: '/path/to/repo',
   branch: 'branch',
   pr: 12,
+  mode: 'run|clean',
+  paths: ['src'],
   intent: {
     source: 'file|pr|none',
     pr: 12,
@@ -270,10 +272,13 @@ async function main({
     'command',
     'check',
   ];
+  const positionals: string[] = [];
   while (args.length) {
     const flag = args.shift();
-    if (!flag?.startsWith('--'))
-      throw new DeslopError('USAGE', 'Expected a named option');
+    if (!flag.startsWith('--')) {
+      positionals.push(flag);
+      continue;
+    }
     const name = flag.slice(2),
       key = name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
     if (booleans.includes(name)) options[key] = true;
@@ -296,12 +301,13 @@ async function main({
   if (command === 'help') options.help = true;
   if (options.help) {
     console.log(
-      'deslop [run] [--local] [--base ref] [--intent file] [--reviewer provider] [--reviewer-model name] [--reviewer-effort effort]\ndeslop init [--config file | --command name=command --check name]\ndeslop status [--publish]\ndeslop shape',
+      'deslop [run] [--local] [--base ref] [--intent file] [--reviewer provider] [--reviewer-model name] [--reviewer-effort effort]\ndeslop clean <path>... [run options]\ndeslop init [--config file | --command name=command --check name]\ndeslop status [--publish]\ndeslop shape',
     );
     return;
   }
   const allowed = {
     run: ['local', 'base', 'intent', 'reviewer', 'reviewerModel', 'reviewerEffort'],
+    clean: ['local', 'base', 'intent', 'reviewer', 'reviewerModel', 'reviewerEffort'],
     init: ['config', 'command', 'check'],
     status: ['publish'],
     shape: [],
@@ -314,6 +320,12 @@ async function main({
         'USAGE',
         `Option ${key} is not valid for ${command}`,
       );
+  if (command === 'clean') {
+    if (!positionals.length)
+      throw new DeslopError('USAGE', 'Name at least one path: deslop clean <path>...');
+    options.paths = positionals;
+  } else if (positionals.length)
+    throw new DeslopError('USAGE', `Unexpected argument: ${positionals[0]}`);
   if (command === 'shape') {
     console.log(JSON.stringify(SHAPE, null, 2));
     console.log(

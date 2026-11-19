@@ -16,6 +16,7 @@ For a pinned per-repository install, use `npm install --save-dev github:leonardo
 ## Commands
 
 - `deslop run` (or bare `deslop`): fresh review and fixes, checks, bounded check fixes, then proof. Dirty work stops with `commit or stash your changes first`. `--intent file` supplies what was asked.
+- `deslop clean <path>...`: review and fix the whole tracked files under the given paths instead of the branch diff, then run the same checks, commits and proof as `run`. It takes the same options as `run` and is refused on the default branch. The prompt lists the file paths and the agent reads each file itself, so there is no size limit. One PR per folder keeps reviews small, but nothing enforces it.
 - `deslop init`: write repo config. `--command name="shell command"` and `--check "CI name"` are repeatable. `--config file` imports an existing config. Missing required values prompt in a terminal and name the missing flag otherwise. No workflow is installed.
 - `deslop status`: read the current commit's git note. `--publish` publishes its GitHub commit status if that final commit is pushed.
 - `deslop shape`: print a small example of the run record and identify fields that may be long.
