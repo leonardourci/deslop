@@ -1,6 +1,6 @@
 ---
 name: review
-description: Review contributions to deslop against its behavior contract, JavaScript toolchain and exact-commit proof requirements.
+description: Review contributions to deslop against its behavior contract, TypeScript toolchain and exact-commit proof requirements.
 ---
 
 # Review a deslop contribution
@@ -13,8 +13,9 @@ Use the shipped [review-code](../../../skills/review-code/SKILL.md),
 [kill-ai-slop](../../../skills/kill-ai-slop/SKILL.md) and
 [audit-tests](../../../skills/audit-tests/SKILL.md) for their concern checklists.
 
-Keep source JavaScript and use JSDoc where the type checker needs it. Follow the development checks
-in [the README](../../../README.md#developing-deslop), on the Node versions selected by CI.
+Keep source and tests TypeScript that Node runs directly: erasable syntax only and `.ts` import
+paths. Follow the development checks in [the README](../../../README.md#developing-deslop), on the
+Node versions selected by CI.
 Validate the latest commit and keep the PR's description and evidence current after later changes.
 Hydra requests the CodeRabbit challenger review; do not request it automatically.
 

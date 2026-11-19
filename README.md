@@ -2,7 +2,7 @@
 
 Deslop reviews committed work, fixes it, runs its checks and marks the final commit. It works before a pull request or push exists. A fresh agent sees the branch diff without check results and edits files; deslop owns every commit, push, check and marker.
 
-Requires Node 22.13+, Git and a signed-in Codex, Claude or configured custom agent. GitHub checks/statuses also need the signed-in `gh` CLI. Install from GitHub:
+Requires Node 22.18+, Git and a signed-in Codex, Claude or configured custom agent. GitHub checks/statuses also need the signed-in `gh` CLI. Install from GitHub:
 
 ```sh
 npm install -g github:leonardourci/deslop
@@ -98,7 +98,7 @@ Local checks run in order on the evolving tree. After each command, deslop commi
 
 ## Developing deslop
 
-Run `npm ci`, `npm run lint`, `npm run typecheck` and `npm test`. `npm run lint:fix` applies safe layout fixes. TypeScript checks the JavaScript through `checkJs`; source stays JavaScript. The configured deslop commands and CI run lint, type checking and tests on Node 22.13 and 24.
+Run `npm ci`, `npm run lint`, `npm run typecheck` and `npm test`. `npm run lint:fix` applies safe layout fixes. Source and tests are TypeScript that Node runs directly, so they use only erasable syntax and `.ts` import paths. The installed command and the fallback lint worker start from JavaScript entries in `bin/` that load the TypeScript through jiti (see [the spec](docs/spec.md#lint-and-type-checking)). The configured deslop commands and CI run lint, type checking and tests on Node 22.18 and 24.
 
 Contributor reviews follow [the repository skill](.agents/skills/review/SKILL.md) and the three
 shipped skills. CodeRabbit is an on-demand challenger requested by Hydra; automatic reviews are off.
