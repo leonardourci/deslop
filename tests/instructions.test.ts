@@ -88,6 +88,30 @@ test('repo instructions replace one default skill and can disable the others', (
   assert.doesNotMatch(prompt, /audit-tests:|kill-ai-slop:|regression coverage|Judge coverage/);
 });
 
+test('repo skills named like shipped ones replace them, below the instructions map', (t) => {
+  const f = fixture(t);
+  const skill = (folder, name, text) => {
+    mkdirSync(join(f.root, folder, 'skills', name), { recursive: true });
+    writeFileSync(join(f.root, folder, 'skills', name, 'SKILL.md'), text);
+  };
+  skill('.agents', 'kill-ai-slop', 'Agents cleanup rules');
+  skill('.claude', 'kill-ai-slop', 'Claude cleanup rules');
+  skill('.claude', 'review-code', 'Claude correctness rules');
+  skill('.agents', 'audit-tests', 'Agents test rules');
+  skill('.agents', 'review-code', 'Ignored correctness rules');
+  writeFileSync(join(f.root, '.gitignore'), '.agents/skills/review-code/\n');
+  writeFileSync(join(f.root, 'tests.md'), 'Mapped test rules');
+  f.config.instructions = { 'audit-tests': 'tests.md' };
+  f.configure();
+  f.commit();
+  pass(f.call('run', '--reviewer', 'fixture'));
+  const prompt = f.load().calls[0].prompt.split('\n\nBranch diff')[0];
+  assert.match(prompt, /review-code:\nClaude correctness rules/);
+  assert.match(prompt, /audit-tests:\nMapped test rules/);
+  assert.match(prompt, /kill-ai-slop:\nAgents cleanup rules/);
+  assert.doesNotMatch(prompt, /Claude cleanup rules|Agents test rules|Ignored correctness rules|# Kill AI slop/);
+});
+
 test('machine skill overrides win over repo settings without changing the tree', (t) => {
   const f = fixture(t);
   writeFileSync(join(f.root, 'repo.md'), 'Repo cleanup rules');

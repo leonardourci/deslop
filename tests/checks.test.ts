@@ -30,7 +30,7 @@ test('CI waiting replaces local commands rather than running both', (t) => {
     ],
   );
   assert.match(
-    readFileSync(join(f.root, data.checks[0].log), 'utf8'),
+    readFileSync(data.checks[0].log, 'utf8'),
     /Tests: success/,
   );
   assert.equal(f.call('status').status, 0);

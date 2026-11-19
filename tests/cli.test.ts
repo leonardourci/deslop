@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   readFileSync,
+  readdirSync,
   writeFileSync,
   existsSync,
   rmSync,
@@ -24,6 +25,7 @@ const finding = {
   where: 'work.txt:1',
   problem: 'bad content',
   fixed: true,
+  kind: 'defect',
 };
 
 test('checks cannot change configured hooks or enable an existing hook', (t) => {
@@ -288,17 +290,19 @@ test('failed checks resume the same session and produce bounded failure excerpts
     },
   ];
   f.save(s);
-  passed(f.call('--reviewer', 'fixture'));
+  writeFileSync(join(f.home, 'intent.md'), 'Asked: make work.txt good.');
+  passed(f.call('--intent', join(f.home, 'intent.md'), '--reviewer', 'fixture'));
   const calls = f.load().calls,
     data = f.runs()[0];
   assert.equal(calls.length, 2);
   assert.deepEqual(calls[1].args, ['--resume', 'session-fixture']);
   assert.match(calls[1].prompt, /FAIL work/);
+  assert.match(calls[1].prompt, /^Intent supplied with this review[^\n]*\nAsked: make work\.txt good\./);
   assert.equal(data.checks[0].ok, false);
   assert.equal(data.checks[1].ok, true);
   assert.ok(data.checks[0].failures[0].excerpt.split('\n').length <= 20);
   assert.ok(
-    readFileSync(join(f.root, data.checks[0].log), 'utf8').split('\n').length >
+    readFileSync(data.checks[0].log, 'utf8').split('\n').length >
       20,
   );
   passed(f.call('status'));
@@ -535,6 +539,15 @@ test('invalid agent output and unfixed items cannot create proof', (t) => {
   failed(f.call('run', '--reviewer', 'fixture'), 'REVIEW_OUTPUT');
   assert.equal(f.call('status').status, 1);
   s = f.load();
+  s.actions = [{ items: [{
+    ...finding,
+    id: ' '
+  }] }];
+  f.save(s);
+  const blank = f.call('run', '--reviewer', 'codex');
+  failed(blank, 'REVIEW_OUTPUT');
+  assert.match(blank.stderr, /Invalid review item 1: .*"id":" "/);
+  s = f.load();
   s.actions = [
     {
       items: [
@@ -572,7 +585,7 @@ test('reviewer non-defect notes do not block checks or proof', (t) => {
   passed(f.call('status'));
 });
 
-test('real unfixed defects still block proof regardless of wording or missing kind', (t) => {
+test('real unfixed defects still block proof regardless of wording', (t) => {
   const f = fixture(t);
   const s = f.load();
   const defects = [
@@ -584,7 +597,7 @@ test('real unfixed defects still block proof regardless of wording or missing ki
     where: 'src/run.js:1',
     problem,
     fixed: false,
-    ...(index === 0 ? { kind: 'defect' } : {}),
+    kind: 'defect',
   }));
   s.actions = [{ items: [...defects, ...nonDefectExamples.map(item => ({
     ...item,
@@ -610,12 +623,111 @@ test('base override wins over an open stacked PR base and no PR falls back local
   s.pr = {
     state: 'OPEN',
     baseRefName: 'parent',
+    number: 3,
+    body: 'Asked: stack on parent.',
   };
   f.save(s);
   passed(f.call('run', '--reviewer', 'fixture'));
   assert.doesNotMatch(f.load().calls[0].prompt, /diff --git a\/work.txt/);
   passed(f.call('run', '--base', 'main', '--reviewer', 'fixture'));
   assert.match(f.load().calls[1].prompt, /diff --git a\/work.txt/);
+  assert.match(f.load().calls[1].prompt, /^Intent supplied[^\n]*\nAsked: stack on parent\./);
+});
+
+test('the prompt opens with the intent file, else the open PR description, else says none was supplied', (t) => {
+  const f = fixture(t);
+  f.push();
+  const s = f.load();
+  s.pr = {
+    state: 'OPEN',
+    baseRefName: 'main',
+    number: 7,
+    body: 'Asked: keep the retry around the flaky upstream call.',
+  };
+  f.save(s);
+  writeFileSync(join(f.home, 'intent.md'), 'Asked: rename the login field.');
+  writeFileSync(join(f.home, 'blank.md'), ' \n');
+  failed(f.call('run', '--intent', join(f.home, 'missing.md'), '--reviewer', 'fixture', '--local'), 'USAGE');
+  failed(f.call('run', '--intent', join(f.home, 'blank.md'), '--reviewer', 'fixture', '--local'), 'USAGE');
+  passed(f.call('run', '--intent', join(f.home, 'intent.md'), '--reviewer', 'fixture', '--local'));
+  passed(f.call('run', '--reviewer', 'fixture', '--local'));
+  const prompts = f.load().calls.map((call) => call.prompt);
+  assert.match(prompts[0], /^Intent supplied with this review[^\n]*\nAsked: rename the login field\./);
+  assert.doesNotMatch(prompts[0], /flaky upstream/);
+  assert.match(prompts[1], /^Intent supplied with this review[^\n]*\nAsked: keep the retry/);
+  const pr = f.load();
+  delete pr.pr;
+  f.save(pr);
+  f.git('switch', '-c', 'feature/login');
+  passed(f.call('run', '--reviewer', 'fixture', '--local'));
+  assert.match(f.load().calls.at(-1).prompt, /^No intent was supplied with this review, so every code smell is unasked\./);
+  assert.deepEqual(
+    f.runs().map((run) => run.intent).sort((a, b) => a.source.localeCompare(b.source)),
+    [
+      {
+        source: 'file',
+        path: join(f.home, 'intent.md'),
+      },
+      { source: 'none' },
+      {
+        source: 'pr',
+        pr: 7,
+      },
+    ],
+  );
+  const day = /^\d{4}-\d{2}-\d{2}-remote-/;
+  const names = readdirSync(join(f.home, 'deslop', 'reviews')).sort();
+  assert.ok(names.every((name) => day.test(name)), names.join(', '));
+  assert.deepEqual(
+    names.map((name) => name.replace(day, '')),
+    ['PR-7-2.json', 'PR-7.json', 'feature-login.json'],
+  );
+  assert.equal(
+    JSON.parse(f.git('notes', '--ref=deslop', 'show', 'HEAD')).run,
+    join(f.home, 'deslop', 'reviews', names[2]),
+  );
+});
+
+test('clean reviews whole files by path with the same checks, commits and proof as run', (t) => {
+  const f = fixture(t);
+  mkdirSync(join(f.root, 'lib'));
+  writeFileSync(join(f.root, 'lib', 'old.txt'), 'old');
+  writeFileSync(join(f.root, '.gitignore'), 'lib/*.log\n');
+  f.git('add', '.');
+  f.git('commit', '-m', 'add lib');
+  f.git('switch', 'main');
+  failed(f.call('clean', 'lib', '--reviewer', 'fixture'), 'BRANCH');
+  f.git('switch', 'change');
+  writeFileSync(join(f.root, 'lib', 'cache.log'), 'ignored');
+  failed(f.call('clean', '--reviewer', 'fixture'), 'USAGE');
+  failed(f.call('clean', '..', '--reviewer', 'fixture'), 'USAGE');
+  failed(f.call('clean', 'missing', '--reviewer', 'fixture'), 'NO_CHANGES');
+  const s = f.load();
+  s.actions = [
+    {
+      files: { 'lib/old.txt': 'tidy' },
+      items: [finding],
+    },
+  ];
+  f.save(s);
+  const result = spawnSync(process.execPath, [f.cli, 'clean', '.', '../base.txt', '--reviewer', 'fixture'], {
+    cwd: join(f.root, 'lib'),
+    env: f.env,
+    encoding: 'utf8',
+  });
+  passed(result);
+  const prompt = f.load().calls.at(-1).prompt;
+  assert.match(prompt, /Files to review and fix in full[^\n]*\nbase\.txt\nlib\/old\.txt\nProject root:/);
+  assert.doesNotMatch(prompt, /diff --git/);
+  assert.equal(f.git('log', '-1', '--format=%s'), 'deslop: fix review findings');
+  assert.equal(readFileSync(join(f.root, 'lib', 'old.txt'), 'utf8'), 'tidy');
+  const data = f.runs().at(-1);
+  assert.equal(data.mode, 'clean');
+  assert.deepEqual(data.paths, ['lib', 'base.txt']);
+  assert.equal(data.checks[0].ok, true);
+  const status = f.call('status');
+  passed(status);
+  assert.match(status.stdout, /scope: deslop clean lib base\.txt/);
 });
 
 test('init creates repo config without a workflow and shape works outside a repository', (t) => {
@@ -626,7 +738,28 @@ test('init creates repo config without a workflow and shape works outside a repo
   failed(f.call('init'), 'USAGE');
   passed(f.call('init', '--command', 'tests=npm test', '--check', 'Tests'));
   assert.equal(existsSync(join(f.root, '.github/workflows')), false);
+  const template = join(f.root, '.github', 'pull_request_template.md');
+  assert.deepEqual(
+    readFileSync(template, 'utf8').match(/^## .+/gm),
+    ['## What was asked', '## What changed', '## How it was checked'],
+  );
   failed(f.call('init'), 'CONFIG');
+  const reinit = (...args) => {
+    rmSync(join(f.root, 'deslop.config.json'));
+    passed(f.call('init', '--command', 'tests=npm test', '--check', 'Tests', ...args));
+  };
+  rmSync(template);
+  mkdirSync(join(f.root, 'docs'));
+  writeFileSync(join(f.root, 'docs', 'PULL_REQUEST_TEMPLATE.txt'), 'Our template');
+  reinit();
+  assert.equal(existsSync(template), false);
+  rmSync(join(f.root, 'docs'), { recursive: true });
+  writeFileSync(join(f.root, 'docs'), 'a file, not a folder');
+  reinit();
+  assert.ok(existsSync(template));
+  rmSync(template);
+  reinit('--no-pr-template');
+  assert.equal(existsSync(template), false);
   const result = spawnSync(process.execPath, [f.cli, 'shape'], {
     cwd: f.home,
     env: f.env,
@@ -635,6 +768,25 @@ test('init creates repo config without a workflow and shape works outside a repo
   passed(result);
   assert.match(result.stdout, /Potentially long/);
   assert.match(result.stdout, /20 lines/);
+});
+
+test('skill copy starts a repo override from the shipped skill and never overwrites one', (t) => {
+  const f = fixture(t);
+  const target = join(f.root, '.agents', 'skills', 'kill-ai-slop', 'SKILL.md');
+  passed(f.call('skill', 'copy', 'kill-ai-slop'));
+  assert.equal(
+    readFileSync(target, 'utf8'),
+    readFileSync(new URL('../skills/kill-ai-slop/SKILL.md', import.meta.url), 'utf8'),
+  );
+  writeFileSync(target, 'Edited rules');
+  failed(f.call('skill', 'copy', 'kill-ai-slop'), 'SKILL_EXISTS');
+  assert.equal(readFileSync(target, 'utf8'), 'Edited rules');
+  mkdirSync(join(f.root, '.claude', 'skills', 'review-code'), { recursive: true });
+  writeFileSync(join(f.root, '.claude', 'skills', 'review-code', 'SKILL.md'), 'Claude rules');
+  failed(f.call('skill', 'copy', 'review-code'), 'SKILL_EXISTS');
+  assert.equal(existsSync(join(f.root, '.agents', 'skills', 'review-code')), false);
+  failed(f.call('skill', 'copy', 'unknown'), 'USAGE');
+  failed(f.call('skill', 'paste', 'review-code'), 'USAGE');
 });
 
 test('installed executable symlinks invoke the command and removed flags are rejected', (t) => {
@@ -733,8 +885,8 @@ test('a concurrent HEAD change between final checks and proof cannot receive a m
     join(f.bin, 'git'),
     `#!/usr/bin/env node
 const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
-const args=process.argv.slice(2), real=${JSON.stringify(f.gitBin)}, root=${JSON.stringify(f.root)}, counter=${JSON.stringify(join(f.home, 'statuses-after-checks'))};
-if(args[0]==='status') { const runs=path.join(root,'.deslop','runs'); if(fs.existsSync(runs)) { const ids=fs.readdirSync(runs); const record=ids[0]&&path.join(runs,ids[0],'run.json'); if(record&&fs.existsSync(record)&&JSON.parse(fs.readFileSync(record)).checks.some(check=>check.ok)) { if(!fs.existsSync(counter)){fs.writeFileSync(counter,'changed');cp.execFileSync(real,['commit','--allow-empty','-m','concurrent commit'],{cwd:root});} } } }
+const args=process.argv.slice(2), real=${JSON.stringify(f.gitBin)}, root=${JSON.stringify(f.root)}, counter=${JSON.stringify(join(f.home, 'statuses-after-checks'))}, reviews=${JSON.stringify(join(f.home, 'deslop', 'reviews'))};
+if(args[0]==='status') { if(fs.existsSync(reviews)) { const names=fs.readdirSync(reviews); const record=names[0]&&path.join(reviews,names[0]); if(record&&JSON.parse(fs.readFileSync(record)).checks.some(check=>check.ok)) { if(!fs.existsSync(counter)){fs.writeFileSync(counter,'changed');cp.execFileSync(real,['commit','--allow-empty','-m','concurrent commit'],{cwd:root});} } } }
 const result=cp.spawnSync(real,args,{stdio:'inherit'});process.exit(result.status??1);
 `,
     { mode: 0o755 },

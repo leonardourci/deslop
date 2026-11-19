@@ -210,6 +210,7 @@ test('unfixed check repairs end red and stay separate from review findings', (t)
           where: 'work.txt',
           problem: 'unresolved',
           fixed: false,
+          kind: 'defect',
         },
       ],
     },
@@ -418,6 +419,7 @@ test('red rerun removes a previous note and publishes failure together', (t) => 
           where: 'work.txt',
           problem: 'unfixed',
           fixed: false,
+          kind: 'defect',
         },
       ],
     },
@@ -456,6 +458,7 @@ test('fresh check repairs receive review items and paths and keep review counts 
           where: 'work.txt',
           problem: 'earlier review finding',
           fixed: true,
+          kind: 'defect',
         },
       ],
     },
@@ -467,6 +470,7 @@ test('fresh check repairs receive review items and paths and keep review counts 
           where: 'work.txt',
           problem: 'check repair',
           fixed: true,
+          kind: 'defect',
         },
       ],
     },
@@ -532,7 +536,8 @@ test('unfixed findings invalidate proof before a rejecting commit hook', (t) => 
       id: 'R1',
       where: 'work.txt',
       problem: 'unfixed',
-      fixed: false
+      fixed: false,
+      kind: 'defect'
     }]
   }];
   f.save(s);

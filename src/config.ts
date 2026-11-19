@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import picomatch from 'picomatch';
 import { git, DeslopError } from './process.ts';
+import { regularFile } from './scope.ts';
 import type { Config, Kind, ModelChoice, Places, Selection, Settings } from './types.ts';
 import {
   DEFAULT_SKILLS,
@@ -281,7 +282,35 @@ export function loadSettings({ home }: { home: string }): Settings {
   validateModels({ models: settings.reviewerModels });
   return settings;
 }
-export function loadConfig({
+async function repoSkills({ root }: { root: string }) {
+  const candidates = Object.keys(DEFAULT_SKILLS).flatMap((name) =>
+    ['.agents', '.claude'].map((folder) => ({
+      name,
+      path: `${folder}/skills/${name}/SKILL.md`,
+    })),
+  );
+  const tracked = new Set(
+    (
+      await git({
+        cwd: root,
+        args: ['ls-files', '-z', '--', ...candidates.map(({ path }) => path)],
+      })
+    ).split('\0'),
+  );
+  const found: Record<string, string> = {};
+  for (const {
+    name,
+    path
+  } of candidates) {
+    const file = tracked.has(path) && regularFile({
+      cwd: root,
+      path,
+    });
+    if (file && !found[name]) found[name] = file;
+  }
+  return found;
+}
+export async function loadConfig({
   places,
   env = process.env
 }: {
@@ -294,10 +323,13 @@ export function loadConfig({
     root: places.root,
     config: readJson({ path: file }),
   });
-  config.instructions = instructionPaths({
-    root: places.root,
-    instructions: config.instructions,
-  });
+  config.instructions = {
+    ...(await repoSkills({ root: places.root })),
+    ...instructionPaths({
+      root: places.root,
+      instructions: config.instructions,
+    }),
+  };
   if (env.DESLOP_INSTRUCTIONS) {
     const localFile = resolve(env.DESLOP_INSTRUCTIONS);
     const instructions = readJson({ path: localFile });

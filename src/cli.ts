@@ -2,9 +2,12 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
+  realpathSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   CONFIG_FILE,
   locations,
@@ -18,6 +21,7 @@ import { git, DeslopError } from './process.ts';
 import { run } from './run.ts';
 import { dirtyPaths, optionalGit } from './git.ts';
 import { requiredValue } from './prompt.ts';
+import { DEFAULT_SKILLS, canonicalSkill } from './instructions.ts';
 import { runningAgent } from './review.ts';
 import { branchInfo } from './github.ts';
 import { publishSuccess } from './publication.ts';
@@ -30,16 +34,47 @@ type CliOptions = RunOptions & {
   config?: string;
   command?: string[];
   check?: string[];
+  noPrTemplate?: boolean;
 };
+const PR_TEMPLATE = `## What was asked
+
+<!-- The request, including any workaround that was explicitly asked for and why. -->
+
+## What changed
+
+## How it was checked
+`;
+function hasPrTemplate({ root }: { root: string }) {
+  return ['', '.github', 'docs'].some((folder) => {
+    const directory = join(root, folder);
+    return (
+      existsSync(directory) &&
+      statSync(directory).isDirectory() &&
+      readdirSync(directory).some((name) =>
+        /^pull_request_template(\..+)?$/i.test(name),
+      )
+    );
+  });
+}
 
 const SHAPE = {
+  id: 'run id',
+  repo: '/path/to/repo',
+  branch: 'branch',
+  pr: 12,
+  mode: 'run|clean',
+  paths: ['src'],
+  intent: {
+    source: 'file|pr|none',
+    pr: 12,
+  },
   verdict: 'passed|failed',
   head: 'commit',
   checks: [
     {
       name: 'tests',
       ok: false,
-      log: '.deslop/runs/id/checks-0-0.log',
+      log: '/path/to/repo/.deslop/runs/id/checks-0-0.log',
       failures: [
         {
           test: 'test name',
@@ -132,9 +167,40 @@ async function init({
   });
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, `${JSON.stringify(config, null, 2)}\n`, { flag: 'wx' });
+  console.log(`wrote: ${target}`);
+  if (!options.noPrTemplate && !hasPrTemplate({ root: places.root })) {
+    const template = join(places.root, '.github', 'pull_request_template.md');
+    mkdirSync(dirname(template), { recursive: true });
+    writeFileSync(template, PR_TEMPLATE, { flag: 'wx' });
+    console.log(`wrote: ${template}`);
+  }
   console.log(
-    `wrote: ${target}\nnext: configure commands and kinds, then commit before running deslop`,
+    'next: configure commands and kinds, then commit before running deslop',
   );
+}
+function copySkill({
+  places,
+  positionals
+}: {
+  places: Places;
+  positionals: string[];
+}) {
+  const [action, requested, ...extra] = positionals;
+  const name = canonicalSkill(requested ?? '');
+  if (action !== 'copy' || extra.length || !Object.hasOwn(DEFAULT_SKILLS, name))
+    throw new DeslopError(
+      'USAGE',
+      `Use deslop skill copy <name> with one of: ${Object.keys(DEFAULT_SKILLS).join(', ')}`,
+    );
+  const [target, claudeSkill] = ['.agents', '.claude'].map((folder) =>
+    join(places.root, folder, 'skills', name, 'SKILL.md'),
+  );
+  for (const file of [target, claudeSkill])
+    if (existsSync(file))
+      throw new DeslopError('SKILL_EXISTS', `${file} already exists`);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, readFileSync(DEFAULT_SKILLS[name]), { flag: 'wx' });
+  console.log(`wrote: ${target}\nnext: edit it and commit; it replaces the shipped ${name}`);
 }
 async function status({
   places,
@@ -177,8 +243,12 @@ async function status({
     process.exitCode = 1;
     return;
   }
+  const scope =
+    marker.mode === 'clean'
+      ? `scope: deslop clean ${marker.paths.join(' ')}\n`
+      : '';
   console.log(
-    `marker: current, head ${head}\ndetails: ${marker.run}\nshape: deslop shape\nlogs: checks[].log (full logs can be large)`,
+    `marker: current, head ${head}\n${scope}details: ${marker.run}\nshape: deslop shape\nlogs: checks[].log (full logs can be large)`,
   );
   if (options.publish) {
     const branch = await git({
@@ -186,7 +256,7 @@ async function status({
       args: ['symbolic-ref', '--short', 'HEAD'],
     });
     try {
-      const config = loadConfig({ places });
+      const config = await loadConfig({ places });
       let selection;
       if (Array.isArray(marker.ciChecks) && Array.isArray(marker.requiredCI)) {
         selection = {
@@ -251,9 +321,10 @@ async function main({
   );
   const command = args[0] && !args[0].startsWith('-') ? args.shift() : 'run';
   const options: CliOptions = {};
-  const booleans = ['local', 'publish', 'help', 'version'];
+  const booleans = ['local', 'publish', 'help', 'version', 'no-pr-template'];
   const values = [
     'base',
+    'intent',
     'reviewer',
     'reviewer-model',
     'reviewer-effort',
@@ -261,10 +332,13 @@ async function main({
     'command',
     'check',
   ];
+  const positionals: string[] = [];
   while (args.length) {
     const flag = args.shift();
-    if (!flag?.startsWith('--'))
-      throw new DeslopError('USAGE', 'Expected a named option');
+    if (!flag.startsWith('--')) {
+      positionals.push(flag);
+      continue;
+    }
     const name = flag.slice(2),
       key = name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
     if (booleans.includes(name)) options[key] = true;
@@ -287,14 +361,17 @@ async function main({
   if (command === 'help') options.help = true;
   if (options.help) {
     console.log(
-      'deslop [run] [--local] [--base ref] [--reviewer provider] [--reviewer-model name] [--reviewer-effort effort]\ndeslop init [--config file | --command name=command --check name]\ndeslop status [--publish]\ndeslop shape',
+      'deslop [run] [--local] [--base ref] [--intent file] [--reviewer provider] [--reviewer-model name] [--reviewer-effort effort]\ndeslop clean <path>... [run options]\ndeslop init [--config file | --command name=command --check name] [--no-pr-template]\ndeslop status [--publish]\ndeslop skill copy <name>\ndeslop shape',
     );
     return;
   }
+  const runOptions = ['local', 'base', 'intent', 'reviewer', 'reviewerModel', 'reviewerEffort'];
   const allowed = {
-    run: ['local', 'base', 'reviewer', 'reviewerModel', 'reviewerEffort'],
-    init: ['config', 'command', 'check'],
+    run: runOptions,
+    clean: runOptions,
+    init: ['config', 'command', 'check', 'noPrTemplate'],
     status: ['publish'],
+    skill: [],
     shape: [],
   };
   if (!allowed[command])
@@ -305,6 +382,12 @@ async function main({
         'USAGE',
         `Option ${key} is not valid for ${command}`,
       );
+  if (command === 'clean') {
+    if (!positionals.length)
+      throw new DeslopError('USAGE', 'Name at least one path: deslop clean <path>...');
+    options.paths = positionals;
+  } else if (positionals.length && command !== 'skill')
+    throw new DeslopError('USAGE', `Unexpected argument: ${positionals[0]}`);
   if (command === 'shape') {
     console.log(JSON.stringify(SHAPE, null, 2));
     console.log(
@@ -313,10 +396,22 @@ async function main({
     return;
   }
   const places = await locations({ cwd });
+  if (options.paths)
+    options.paths = options.paths.map((path) => {
+      const inside = relative(places.root, resolve(realpathSync(cwd), path));
+      if (inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside))
+        throw new DeslopError('USAGE', `Path is outside the repository: ${path}`);
+      return inside || '.';
+    });
   if (command === 'init')
     return await init({
       places,
       options,
+    });
+  if (command === 'skill')
+    return copySkill({
+      places,
+      positionals,
     });
   if (command === 'status')
     return await status({
