@@ -361,9 +361,10 @@ async function main({
     );
     return;
   }
+  const runOptions = ['local', 'base', 'intent', 'reviewer', 'reviewerModel', 'reviewerEffort'];
   const allowed = {
-    run: ['local', 'base', 'intent', 'reviewer', 'reviewerModel', 'reviewerEffort'],
-    clean: ['local', 'base', 'intent', 'reviewer', 'reviewerModel', 'reviewerEffort'],
+    run: runOptions,
+    clean: runOptions,
     init: ['config', 'command', 'check', 'noPrTemplate'],
     status: ['publish'],
     skill: [],

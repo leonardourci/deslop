@@ -277,7 +277,7 @@ async function performRun({
           .split('\0')
           .filter(Boolean)
       : undefined;
-    const from = cleanPaths ? initialHead : info.base;
+    const editsSince = cleanPaths ? initialHead : info.base;
     const initialPaths =
       cleanPaths ||
       (
@@ -365,7 +365,7 @@ async function performRun({
       const paths = (
         await git({
           cwd,
-          args: ['diff', '--name-only', '--no-renames', '-z', from, head],
+          args: ['diff', '--name-only', '--no-renames', '-z', editsSince, head],
         })
       )
         .split('\0')
