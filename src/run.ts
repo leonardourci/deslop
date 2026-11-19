@@ -232,17 +232,11 @@ async function performRun({
     pr: info.pr?.number,
     mode: options.paths ? 'clean' : 'run',
     paths: options.paths,
-    intent: !intent
-      ? { source: 'none' }
-      : options.intent
-        ? {
-            source: 'file',
-            path: resolve(options.intent),
-          }
-        : {
-            source: 'pr',
-            pr: info.pr.number,
-          },
+    intent: intentRecord({
+      intent,
+      file: options.intent,
+      pr: info.pr?.number,
+    }),
     verdict: 'running',
     initialHead,
     head: initialHead,
@@ -731,6 +725,7 @@ async function claimRecord({
   }
 }
 const MAX_FILE_BYTES = 32 * 1024;
+const MAX_INTENT_BYTES = 32 * 1024;
 async function branchTarget({
   cwd,
   base,
@@ -782,11 +777,34 @@ function readIntent({
       throw new DeslopError('USAGE', `Cannot read --intent file: ${error.message}`);
     }
   }
-  if (!text?.trim()) return undefined;
+  if (!text?.trim()) {
+    if (file) throw new DeslopError('USAGE', `The --intent file is empty: ${file}`);
+    return undefined;
+  }
   const bytes = Buffer.from(text);
-  return bytes.length > MAX_FILE_BYTES
-    ? `${bytes.subarray(0, MAX_FILE_BYTES).toString('utf8')}\n[intent truncated at ${MAX_FILE_BYTES} bytes]`
+  return bytes.length > MAX_INTENT_BYTES
+    ? `${bytes.subarray(0, MAX_INTENT_BYTES).toString('utf8')}\n[intent truncated at ${MAX_INTENT_BYTES} bytes]`
     : text;
+}
+function intentRecord({
+  intent,
+  file,
+  pr
+}: {
+  intent?: string;
+  file?: string;
+  pr?: number;
+}): RunData['intent'] {
+  if (!intent) return { source: 'none' };
+  if (file)
+    return {
+      source: 'file',
+      path: resolve(file),
+    };
+  return {
+    source: 'pr',
+    pr,
+  };
 }
 const MAX_CONTENT_BYTES = 128 * 1024;
 async function dirtyCommitPaths({

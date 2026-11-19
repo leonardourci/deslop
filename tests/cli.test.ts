@@ -290,12 +290,14 @@ test('failed checks resume the same session and produce bounded failure excerpts
     },
   ];
   f.save(s);
-  passed(f.call('--reviewer', 'fixture'));
+  writeFileSync(join(f.home, 'intent.md'), 'Asked: make work.txt good.');
+  passed(f.call('--intent', join(f.home, 'intent.md'), '--reviewer', 'fixture'));
   const calls = f.load().calls,
     data = f.runs()[0];
   assert.equal(calls.length, 2);
   assert.deepEqual(calls[1].args, ['--resume', 'session-fixture']);
   assert.match(calls[1].prompt, /FAIL work/);
+  assert.match(calls[1].prompt, /^Intent supplied with this review[^\n]*\nAsked: make work\.txt good\./);
   assert.equal(data.checks[0].ok, false);
   assert.equal(data.checks[1].ok, true);
   assert.ok(data.checks[0].failures[0].excerpt.split('\n').length <= 20);
@@ -612,12 +614,15 @@ test('base override wins over an open stacked PR base and no PR falls back local
   s.pr = {
     state: 'OPEN',
     baseRefName: 'parent',
+    number: 3,
+    body: 'Asked: stack on parent.',
   };
   f.save(s);
   passed(f.call('run', '--reviewer', 'fixture'));
   assert.doesNotMatch(f.load().calls[0].prompt, /diff --git a\/work.txt/);
   passed(f.call('run', '--base', 'main', '--reviewer', 'fixture'));
   assert.match(f.load().calls[1].prompt, /diff --git a\/work.txt/);
+  assert.match(f.load().calls[1].prompt, /^Intent supplied[^\n]*\nAsked: stack on parent\./);
 });
 
 test('the prompt opens with the intent file, else the open PR description, else says none was supplied', (t) => {
@@ -632,6 +637,9 @@ test('the prompt opens with the intent file, else the open PR description, else 
   };
   f.save(s);
   writeFileSync(join(f.home, 'intent.md'), 'Asked: rename the login field.');
+  writeFileSync(join(f.home, 'blank.md'), ' \n');
+  failed(f.call('run', '--intent', join(f.home, 'missing.md'), '--reviewer', 'fixture', '--local'), 'USAGE');
+  failed(f.call('run', '--intent', join(f.home, 'blank.md'), '--reviewer', 'fixture', '--local'), 'USAGE');
   passed(f.call('run', '--intent', join(f.home, 'intent.md'), '--reviewer', 'fixture', '--local'));
   passed(f.call('run', '--reviewer', 'fixture', '--local'));
   const prompts = f.load().calls.map((call) => call.prompt);
@@ -641,6 +649,7 @@ test('the prompt opens with the intent file, else the open PR description, else 
   const pr = f.load();
   delete pr.pr;
   f.save(pr);
+  f.git('switch', '-c', 'feature/login');
   passed(f.call('run', '--reviewer', 'fixture', '--local'));
   assert.match(f.load().calls.at(-1).prompt, /^Intent supplied with this review: none\. No intent was supplied, so every code smell is unasked\./);
   assert.deepEqual(
@@ -662,7 +671,7 @@ test('the prompt opens with the intent file, else the open PR description, else 
   assert.ok(names.every((name) => day.test(name)), names.join(', '));
   assert.deepEqual(
     names.map((name) => name.replace(day, '')),
-    ['PR-7-2.json', 'PR-7.json', 'change.json'],
+    ['PR-7-2.json', 'PR-7.json', 'feature-login.json'],
   );
   assert.equal(
     JSON.parse(f.git('notes', '--ref=deslop', 'show', 'HEAD')).run,

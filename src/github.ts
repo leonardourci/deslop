@@ -124,7 +124,8 @@ export async function branchInfo({
     if (!['COMMAND', 'COMMAND_TIMEOUT', 'ENOENT'].includes(error.code))
       throw error;
   }
-  const candidate = (!override && pr?.baseRefName) || defaultBranch;
+  const prBase = override ? undefined : pr?.baseRefName;
+  const candidate = prBase || defaultBranch;
   const remoteBase = `origin/${candidate}`;
   const baseRef =
     override ||
