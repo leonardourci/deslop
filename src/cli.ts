@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -31,7 +32,27 @@ type CliOptions = RunOptions & {
   config?: string;
   command?: string[];
   check?: string[];
+  noPrTemplate?: boolean;
 };
+const PR_TEMPLATE = `## What was asked
+
+<!-- The request, including any workaround that was explicitly asked for and why. -->
+
+## What changed
+
+## How it was checked
+`;
+function hasPrTemplate({ root }: { root: string }) {
+  return ['', '.github', 'docs'].some((folder) => {
+    const directory = join(root, folder);
+    return (
+      existsSync(directory) &&
+      readdirSync(directory).some((name) =>
+        /^pull_request_template(\.md)?$/i.test(name),
+      )
+    );
+  });
+}
 
 const SHAPE = {
   id: 'run id',
@@ -143,8 +164,15 @@ async function init({
   });
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, `${JSON.stringify(config, null, 2)}\n`, { flag: 'wx' });
+  console.log(`wrote: ${target}`);
+  if (!options.noPrTemplate && !hasPrTemplate({ root: places.root })) {
+    const template = join(places.root, '.github', 'pull_request_template.md');
+    mkdirSync(dirname(template), { recursive: true });
+    writeFileSync(template, PR_TEMPLATE, { flag: 'wx' });
+    console.log(`wrote: ${template}`);
+  }
   console.log(
-    `wrote: ${target}\nnext: configure commands and kinds, then commit before running deslop`,
+    'next: configure commands and kinds, then commit before running deslop',
   );
 }
 function copySkill({
@@ -282,7 +310,7 @@ async function main({
   );
   const command = args[0] && !args[0].startsWith('-') ? args.shift() : 'run';
   const options: CliOptions = {};
-  const booleans = ['local', 'publish', 'help', 'version'];
+  const booleans = ['local', 'publish', 'help', 'version', 'no-pr-template'];
   const values = [
     'base',
     'intent',
@@ -322,14 +350,14 @@ async function main({
   if (command === 'help') options.help = true;
   if (options.help) {
     console.log(
-      'deslop [run] [--local] [--base ref] [--intent file] [--reviewer provider] [--reviewer-model name] [--reviewer-effort effort]\ndeslop clean <path>... [run options]\ndeslop init [--config file | --command name=command --check name]\ndeslop status [--publish]\ndeslop skill copy <name>\ndeslop shape',
+      'deslop [run] [--local] [--base ref] [--intent file] [--reviewer provider] [--reviewer-model name] [--reviewer-effort effort]\ndeslop clean <path>... [run options]\ndeslop init [--config file | --command name=command --check name] [--no-pr-template]\ndeslop status [--publish]\ndeslop skill copy <name>\ndeslop shape',
     );
     return;
   }
   const allowed = {
     run: ['local', 'base', 'intent', 'reviewer', 'reviewerModel', 'reviewerEffort'],
     clean: ['local', 'base', 'intent', 'reviewer', 'reviewerModel', 'reviewerEffort'],
-    init: ['config', 'command', 'check'],
+    init: ['config', 'command', 'check', 'noPrTemplate'],
     status: ['publish'],
     skill: [],
     shape: [],

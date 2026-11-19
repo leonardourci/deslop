@@ -710,7 +710,24 @@ test('init creates repo config without a workflow and shape works outside a repo
   failed(f.call('init'), 'USAGE');
   passed(f.call('init', '--command', 'tests=npm test', '--check', 'Tests'));
   assert.equal(existsSync(join(f.root, '.github/workflows')), false);
+  const template = join(f.root, '.github', 'pull_request_template.md');
+  assert.deepEqual(
+    readFileSync(template, 'utf8').match(/^## .+/gm),
+    ['## What was asked', '## What changed', '## How it was checked'],
+  );
   failed(f.call('init'), 'CONFIG');
+  const reinit = (...args) => {
+    rmSync(join(f.root, 'deslop.config.json'));
+    passed(f.call('init', '--command', 'tests=npm test', '--check', 'Tests', ...args));
+  };
+  rmSync(template);
+  mkdirSync(join(f.root, 'docs'));
+  writeFileSync(join(f.root, 'docs', 'PULL_REQUEST_TEMPLATE.md'), 'Our template');
+  reinit();
+  assert.equal(existsSync(template), false);
+  rmSync(join(f.root, 'docs'), { recursive: true });
+  reinit('--no-pr-template');
+  assert.equal(existsSync(template), false);
   const result = spawnSync(process.execPath, [f.cli, 'shape'], {
     cwd: f.home,
     env: f.env,
