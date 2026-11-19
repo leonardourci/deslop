@@ -242,3 +242,18 @@ if (args[0] === 'pr') {
     cli,
   };
 }
+
+export const nonDefectExamples = [
+  {
+    "id": "7",
+    "where": "Review scope",
+    "problem": "The review used the supplied diff and file excerpts. No checks ran, so the full suite and call sites outside the supplied diff remain unverified.",
+    "fixed": false
+  },
+  {
+    "id": "audit-scope",
+    "where": "tests/e2e/card-input.test.ts - /Users/leonardourci/.pnyx/hydras/hydra-2/copies/pnyx-118/tests/e2e/card-input.test.ts",
+    "problem": "No defect found in the supplied change. Keep the test. It asserts that the new brief becomes visible in the open modal’s Instructions region and the old brief is no longer visible there. The review used the supplied diff and test source because local file reads were unavailable. Checks remain pending with Deslop.",
+    "fixed": false
+  }
+];

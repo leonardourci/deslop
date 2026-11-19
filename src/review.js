@@ -15,8 +15,12 @@ const ITEM_SCHEMA = {
     where: { type: 'string' },
     problem: { type: 'string' },
     fixed: { type: 'boolean' },
+    kind: {
+      type: 'string',
+      enum: ['defect', 'note', 'verification']
+    },
   },
-  required: ['id', 'where', 'problem', 'fixed'],
+  required: ['id', 'where', 'problem', 'fixed', 'kind'],
 };
 export const REVIEW_SCHEMA = {
   type: 'object',
@@ -92,12 +96,13 @@ function parseReview({ value }) {
         (key) => typeof item[key] === 'string' && item[key].trim(),
       ) ||
       typeof item.fixed !== 'boolean' ||
+      (item.kind !== undefined && !['defect', 'note', 'verification'].includes(item.kind)) ||
       ids.has(item.id)
     )
       throw new DeslopError('REVIEW_OUTPUT', 'Invalid review item');
     ids.add(item.id);
   }
-  return value.items;
+  return value.items.filter(item => item.kind === undefined || item.kind === 'defect');
 }
 /** @param {{cwd: string, common: string, choices: string[], config: Pick<import('./types.js').Config,'reviewers'|'reviewerModels'>, settings: import('./types.js').Settings, prompt: string, session?: import('./types.js').Session, model?: string, effort?: string, timeoutMs?: number, scope?: import('./types.js').Scope, env?: NodeJS.ProcessEnv}} options */
 export async function review({

@@ -6,7 +6,7 @@
  * @typedef {{reviewer?: string|string[], reviewerModels?: Record<string,ModelChoice>}} Settings
  * @typedef {{kinds: string[], commands: string[], checks: string[], requiredChecks: string[], instructions: string[]}} Selection
  * @typedef {{root: string, common: string, home: string, lock: string}} Places
- * @typedef {{id: string, where: string, problem: string, fixed: boolean}} ReviewItem
+ * @typedef {{id: string, where: string, problem: string, fixed: boolean, kind?: 'defect'|'note'|'verification'}} ReviewItem
  * @typedef {{provider: string, id?: string, choice?: ModelChoice, commits?: string[], context?: {review: ReviewItem[], paths: string[]}}} Session
  * @typedef {{instructionFiles: string[], protectedInstructions: string[], excluded: string[], normalDirectories: string[], configured: string[]}} Scope
  * @typedef {{base?: string, local?: boolean, reviewer?: string, reviewerModel?: string, reviewerEffort?: string}} RunOptions
