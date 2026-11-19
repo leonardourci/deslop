@@ -24,6 +24,7 @@ const finding = {
   where: 'work.txt:1',
   problem: 'bad content',
   fixed: true,
+  kind: 'defect',
 };
 
 test('checks cannot change configured hooks or enable an existing hook', (t) => {
@@ -572,7 +573,7 @@ test('reviewer non-defect notes do not block checks or proof', (t) => {
   passed(f.call('status'));
 });
 
-test('real unfixed defects still block proof regardless of wording or missing kind', (t) => {
+test('real unfixed defects still block proof regardless of wording', (t) => {
   const f = fixture(t);
   const s = f.load();
   const defects = [
@@ -584,7 +585,7 @@ test('real unfixed defects still block proof regardless of wording or missing ki
     where: 'src/run.js:1',
     problem,
     fixed: false,
-    ...(index === 0 ? { kind: 'defect' } : {}),
+    kind: 'defect',
   }));
   s.actions = [{ items: [...defects, ...nonDefectExamples.map(item => ({
     ...item,

@@ -116,7 +116,7 @@ test('a custom provider without a session id receives prior-edit context', async
         command: [
           process.execPath,
           '-e',
-          "let input=''; process.stdin.on('data', chunk=>input+=chunk); process.stdin.on('end',()=>console.log(JSON.stringify({items:[{id:'R1',where:'prompt',problem:input,fixed:true}]})))",
+          "let input=''; process.stdin.on('data', chunk=>input+=chunk); process.stdin.on('end',()=>console.log(JSON.stringify({items:[{id:'R1',where:'prompt',problem:input,fixed:true,kind:'defect'}]})))",
         ],
         resume: ['unused', '{sessionId}'],
       },
@@ -181,6 +181,14 @@ test('non-defect items still require valid fields, kinds and unique ids', async 
     [{
       ...note,
       kind: null
+    }],
+    [{
+      ...note,
+      kind: undefined
+    }],
+    [{
+      ...note,
+      id: ' '
     }],
     [{
       ...note,

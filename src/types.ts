@@ -46,7 +46,7 @@ export type ReviewItem = {
   where: string;
   problem: string;
   fixed: boolean;
-  kind?: 'defect' | 'note' | 'verification';
+  kind: 'defect' | 'note' | 'verification';
 };
 export type Session = {
   provider: string;

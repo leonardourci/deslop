@@ -245,6 +245,12 @@ if (args[0] === 'pr') {
 
 export const nonDefectExamples = [
   {
+    "id": "checks",
+    "where": "",
+    "problem": "No checks were run, as requested.",
+    "fixed": false
+  },
+  {
     "id": "7",
     "where": "Review scope",
     "problem": "The review used the supplied diff and file excerpts. No checks ran, so the full suite and call sites outside the supplied diff remain unverified.",
