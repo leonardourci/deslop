@@ -265,6 +265,7 @@ async function performRun({
     }
   };
   const save = () => writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
+  save();
   try {
     const cleanPaths = options.paths
       ? (
