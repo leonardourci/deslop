@@ -33,13 +33,21 @@ type CliOptions = RunOptions & {
 };
 
 const SHAPE = {
+  id: 'run id',
+  repo: '/path/to/repo',
+  branch: 'branch',
+  pr: 12,
+  intent: {
+    source: 'file|pr|none',
+    pr: 12,
+  },
   verdict: 'passed|failed',
   head: 'commit',
   checks: [
     {
       name: 'tests',
       ok: false,
-      log: '.deslop/runs/id/checks-0-0.log',
+      log: '/path/to/repo/.deslop/runs/id/checks-0-0.log',
       failures: [
         {
           test: 'test name',

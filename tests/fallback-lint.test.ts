@@ -26,7 +26,7 @@ test('a repo without lint gets the shipped ESLint on changed files', (t) => {
   const check = lintCheck(f);
   assert.equal(check.ok, false);
   assert.match(
-    readFileSync(join(f.root, check.log), 'utf8'),
+    readFileSync(check.log, 'utf8'),
     /deslop\/entries-on-lines/,
   );
 });
@@ -82,7 +82,7 @@ for (const filename of ['eslint.config.mjs', '.eslintrc.json', 'package.json'])
     f.commit();
     assert.equal(f.call('run', '--reviewer', 'fixture').status, 1);
     assert.match(
-      readFileSync(join(f.root, lintCheck(f).log), 'utf8'),
+      readFileSync(lintCheck(f).log, 'utf8'),
       /no-console/,
     );
   });

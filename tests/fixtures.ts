@@ -207,11 +207,10 @@ if (args[0] === 'pr') {
       env,
       encoding: 'utf8',
     });
+  const reviews = join(home, 'deslop', 'reviews');
   const runs = () =>
-    readdirSync(join(root, '.deslop', 'runs')).map((id) =>
-      JSON.parse(
-        readFileSync(join(root, '.deslop', 'runs', id, 'run.json'), 'utf8'),
-      ),
+    readdirSync(reviews).map((name) =>
+      JSON.parse(readFileSync(join(reviews, name), 'utf8')),
     );
   const push = () => {
     const remote = join(home, 'remote.git');

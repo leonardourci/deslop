@@ -18,7 +18,7 @@ For a pinned per-repository install, use `npm install --save-dev github:leonardo
 - `deslop run` (or bare `deslop`): fresh review and fixes, checks, bounded check fixes, then proof. Dirty work stops with `commit or stash your changes first`. `--intent file` supplies what was asked.
 - `deslop init`: write repo config. `--command name="shell command"` and `--check "CI name"` are repeatable. `--config file` imports an existing config. Missing required values prompt in a terminal and name the missing flag otherwise. No workflow is installed.
 - `deslop status`: read the current commit's git note. `--publish` publishes its GitHub commit status if that final commit is pushed.
-- `deslop shape`: print a small example of the run JSON and identify fields that may be long.
+- `deslop shape`: print a small example of the run record and identify fields that may be long.
 
 The reviewer prompt opens with the intent: the `--intent` file, otherwise the open PR's description fetched through `gh`, capped at 32 KiB. With neither, the prompt says no intent was supplied, so every code smell counts as unasked. The run record's `intent.source` is `file`, `pr` or `none`.
 
@@ -78,7 +78,7 @@ The test audit checks important changed behavior through the public surface, wit
 
 ## Output and proof
 
-A short summary lists the verdict, each check, findings/fixes and commits, with a path to `.deslop/runs/<id>/run.json`. This folder is git-ignored. JSON includes `left` paths after failures, separate `checkFixes` by turn, workflow edits, and checks with `name`, `ok`, `log` and `failures`, review counts/items, and commits. Failure excerpts have at most 20 lines; full output stays in separate logs and can be large. Use `deslop shape` before reading a large run file.
+A short summary lists the verdict, each check, findings/fixes and commits, with the path to the run record. Every run saves its record as `~/deslop/reviews/<YYYY-MM-DD>-<repo>-PR-<n>.json`, or `<YYYY-MM-DD>-<repo>-<branch>.json` when the branch has no open PR, so past reviews stay queryable. A later run for the same PR or branch on the same day gets a numeric suffix (`-2`, `-3`). `<repo>` is the origin repository name, or the checkout folder without an origin. Check logs and per-turn agent output stay in the git-ignored `.deslop/runs/<id>/` folder, and the record holds their absolute paths. JSON includes `left` paths after failures, separate `checkFixes` by turn, workflow edits, and checks with `name`, `ok`, `log` and `failures`, review counts/items, and commits. Failure excerpts have at most 20 lines; full output stays in separate logs and can be large. Use `deslop shape` before reading a large run record.
 
 Green checks and completed fixes add a git note under `refs/notes/deslop` to the final exact commit. The GitHub commit status is named `deslop` and requires a pushed commit. Local runs keep their proof local by default. `status --publish` checks the selected CI on that exact commit before posting success. Set `publishLocal: true` to allow local checks alone to publish success. A new commit has no proof until it passes its own run. This is an honesty record, not a signature. Failed runs have no new marker.
 
@@ -90,7 +90,7 @@ Check-fix edits to config or instruction files end red and remain available for 
 
 ## Editing scope
 
-Tracked instruction prose such as `.agents/`, `.claude/`, `AGENTS.md` and `skills/` can be edited when it is in the reviewed diff. Other instruction files, existing untracked files and ignored paths stay outside the editing scope; git metadata and git commands remain denied. New normal source and test files can be created and are included in deslop's commit and `run.json` under `newFiles`. A dirty checkout is refused before the agent runs.
+Tracked instruction prose such as `.agents/`, `.claude/`, `AGENTS.md` and `skills/` can be edited when it is in the reviewed diff. Other instruction files, existing untracked files and ignored paths stay outside the editing scope; git metadata and git commands remain denied. New normal source and test files can be created and are included in deslop's commit and the run record under `newFiles`. A dirty checkout is refused before the agent runs.
 
 Codex uses a current CLI with [permission-profile support](https://developers.openai.com/codex/permissions) to grant exact instruction-file exceptions while preserving git protection. Claude uses file-specific Edit rules and non-interactive permissions. Custom commands must honor the supplied file scope and keep git operations disabled.
 

@@ -6,7 +6,8 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { basename, join, resolve } from 'node:path';
 import { git, DeslopError } from './process.ts';
 import { loadConfig, loadSettings, select, instructionsFor } from './config.ts';
 import { branchInfo, remoteHead, pushFixes, commitStatus } from './github.ts';
@@ -216,9 +217,16 @@ async function performRun({
     dir = join(root, 'runs', runId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(root, '.gitignore'), '*\n');
-  const file = join(dir, 'run.json');
+  const file = await claimRecord({
+    cwd,
+    branch: info.branch,
+    pr: info.pr?.number,
+  });
   const data: RunData = {
     id: runId,
+    repo: cwd,
+    branch: info.branch,
+    pr: info.pr?.number,
     intent: !intent
       ? { source: 'none' }
       : options.intent
@@ -604,7 +612,7 @@ async function performRun({
       requiredCI: finalSelection.requiredChecks,
       commits: data.commits,
       finishedAt: new Date().toISOString(),
-      run: `.deslop/runs/${runId}/run.json`,
+      run: file,
     };
     await git({
       cwd,
@@ -659,7 +667,7 @@ async function performRun({
     save();
     printSummary({
       data,
-      path: `.deslop/runs/${runId}/run.json`,
+      path: file,
     });
   }
 }
@@ -693,6 +701,41 @@ function printSummary({
   );
 }
 
+async function claimRecord({
+  cwd,
+  branch,
+  pr
+}: {
+  cwd: string;
+  branch: string;
+  pr?: number;
+}) {
+  const origin = await optionalGit({
+    cwd,
+    args: ['remote', 'get-url', 'origin'],
+  });
+  const repo = basename(origin || cwd).replace(/\.git$/, '');
+  const now = new Date();
+  const date = [
+    now.getFullYear(),
+    now.getMonth() + 1,
+    now.getDate(),
+  ]
+    .map((part) => String(part).padStart(2, '0'))
+    .join('-');
+  const stem = `${date}-${repo}-${pr ? `PR-${pr}` : branch}`.replace(/[^\w.-]+/g, '-');
+  const dir = join(homedir(), 'deslop', 'reviews');
+  mkdirSync(dir, { recursive: true });
+  for (let copy = 1; ; copy++) {
+    const file = join(dir, copy === 1 ? `${stem}.json` : `${stem}-${copy}.json`);
+    try {
+      writeFileSync(file, '', { flag: 'wx' });
+      return file;
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+    }
+  }
+}
 const MAX_FILE_BYTES = 32 * 1024;
 function readIntent({
   file,

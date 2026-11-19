@@ -1,7 +1,7 @@
 import { execute } from './process.ts';
 import { createWriteStream, readFileSync, writeFileSync } from 'node:fs';
 import { finished } from 'node:stream/promises';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 import { lintInvocation } from './lint.ts';
 import { github, repository, waitForChecks } from './github.ts';
 import type { Check, Config, Selection } from './types.ts';
@@ -78,7 +78,7 @@ async function commandCheck({
   return {
     name,
     ok,
-    log: relative(cwd, file),
+    log: file,
     failures: ok
       ? []
       : failureDetails({
@@ -176,7 +176,7 @@ export async function runChecks({
       name: state.name,
       ok,
       fixable: ['failure', 'error', 'timed_out'].includes(state.state),
-      log: relative(cwd, file),
+      log: file,
       failures: ok
         ? []
         : failureDetails({

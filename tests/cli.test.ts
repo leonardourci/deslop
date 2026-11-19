@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   readFileSync,
+  readdirSync,
   writeFileSync,
   existsSync,
   rmSync,
@@ -299,7 +300,7 @@ test('failed checks resume the same session and produce bounded failure excerpts
   assert.equal(data.checks[1].ok, true);
   assert.ok(data.checks[0].failures[0].excerpt.split('\n').length <= 20);
   assert.ok(
-    readFileSync(join(f.root, data.checks[0].log), 'utf8').split('\n').length >
+    readFileSync(data.checks[0].log, 'utf8').split('\n').length >
       20,
   );
   passed(f.call('status'));
@@ -656,6 +657,17 @@ test('the prompt opens with the intent file, else the open PR description, else 
       },
     ],
   );
+  const day = /^\d{4}-\d{2}-\d{2}-remote-/;
+  const names = readdirSync(join(f.home, 'deslop', 'reviews')).sort();
+  assert.ok(names.every((name) => day.test(name)), names.join(', '));
+  assert.deepEqual(
+    names.map((name) => name.replace(day, '')),
+    ['PR-7-2.json', 'PR-7.json', 'change.json'],
+  );
+  assert.equal(
+    JSON.parse(f.git('notes', '--ref=deslop', 'show', 'HEAD')).run,
+    join(f.home, 'deslop', 'reviews', names[2]),
+  );
 });
 
 test('init creates repo config without a workflow and shape works outside a repository', (t) => {
@@ -773,8 +785,8 @@ test('a concurrent HEAD change between final checks and proof cannot receive a m
     join(f.bin, 'git'),
     `#!/usr/bin/env node
 const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
-const args=process.argv.slice(2), real=${JSON.stringify(f.gitBin)}, root=${JSON.stringify(f.root)}, counter=${JSON.stringify(join(f.home, 'statuses-after-checks'))};
-if(args[0]==='status') { const runs=path.join(root,'.deslop','runs'); if(fs.existsSync(runs)) { const ids=fs.readdirSync(runs); const record=ids[0]&&path.join(runs,ids[0],'run.json'); if(record&&fs.existsSync(record)&&JSON.parse(fs.readFileSync(record)).checks.some(check=>check.ok)) { if(!fs.existsSync(counter)){fs.writeFileSync(counter,'changed');cp.execFileSync(real,['commit','--allow-empty','-m','concurrent commit'],{cwd:root});} } } }
+const args=process.argv.slice(2), real=${JSON.stringify(f.gitBin)}, root=${JSON.stringify(f.root)}, counter=${JSON.stringify(join(f.home, 'statuses-after-checks'))}, reviews=${JSON.stringify(join(f.home, 'deslop', 'reviews'))};
+if(args[0]==='status') { if(fs.existsSync(reviews)) { const names=fs.readdirSync(reviews); const record=names[0]&&path.join(reviews,names[0]); if(record&&fs.statSync(record).size&&JSON.parse(fs.readFileSync(record)).checks.some(check=>check.ok)) { if(!fs.existsSync(counter)){fs.writeFileSync(counter,'changed');cp.execFileSync(real,['commit','--allow-empty','-m','concurrent commit'],{cwd:root});} } } }
 const result=cp.spawnSync(real,args,{stdio:'inherit'});process.exit(result.status??1);
 `,
     { mode: 0o755 },

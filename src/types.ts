@@ -87,6 +87,9 @@ export type Check = {
 };
 export type RunData = {
   id: string;
+  repo: string;
+  branch: string;
+  pr?: number;
   intent: {
     source: 'file' | 'pr' | 'none';
     path?: string;
