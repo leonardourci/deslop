@@ -2,9 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { select } from '../src/config.js';
-import { repoHasTests } from '../src/instructions.js';
-import { fixture } from './fixtures.js';
+import { select } from '../src/config.ts';
+import { repoHasTests } from '../src/instructions.ts';
+import { fixture } from './fixtures.ts';
 
 const config = {
   commands: {},

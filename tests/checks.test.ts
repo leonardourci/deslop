@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fixture } from './fixtures.js';
+import { fixture } from './fixtures.ts';
 
 test('CI waiting replaces local commands rather than running both', (t) => {
   const f = fixture(t);

@@ -10,7 +10,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fixture, nonDefectExamples } from './fixtures.js';
+import { fixture, nonDefectExamples } from './fixtures.ts';
 function passed(result) {
   assert.equal(result.status, 0, result.stdout + result.stderr);
 }

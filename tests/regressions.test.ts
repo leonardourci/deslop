@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { writeFileSync, readFileSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fixture } from './fixtures.js';
+import { fixture } from './fixtures.ts';
 const pass = (r) => assert.equal(r.status, 0, r.stdout + r.stderr);
 
 test('initial review config edits determine the checks used for proof', (t) => {
@@ -142,7 +142,7 @@ test('a transient check-runs error is retried', (t) => {
   f.push();
   s.transientPoll = true;
   f.save(s);
-  const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)}; console.log(JSON.stringify(await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],pollMs:1,timeoutMs:10000})));`;
+  const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.ts', import.meta.url).href)}; console.log(JSON.stringify(await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],pollMs:1,timeoutMs:10000})));`;
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd: f.root,
     env: f.env,
@@ -512,7 +512,7 @@ test('status publication timeouts preserve successful local proof', (t) => {
 
 test('nonliteral true enables worktree configuration guarding', async (t) => {
   const f = fixture(t);
-  const { gitState } = await import('../src/git.js');
+  const { gitState } = await import('../src/git.ts');
   f.git('config', 'extensions.worktreeConfig', 'yes');
   const before = await gitState({ cwd: f.root });
   f.git('config', '--worktree', 'unrelated.value', 'changed');
@@ -557,7 +557,7 @@ const args=process.argv.slice(2);
 if(args[0]==='push') cp.execFileSync(${JSON.stringify(f.gitBin)}, ['--git-dir',${JSON.stringify(remote)},'update-ref','refs/heads/change',${JSON.stringify(intervening)}]);
 const r=cp.spawnSync(${JSON.stringify(f.gitBin)},args,{stdio:'inherit'});process.exit(r.status);
 `, { mode: 0o755 });
-  const script = `import {pushFixes} from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)};await pushFixes({cwd:process.cwd(),branch:'change',expected:${JSON.stringify(expected)}});`;
+  const script = `import {pushFixes} from ${JSON.stringify(new URL('../src/github.ts', import.meta.url).href)};await pushFixes({cwd:process.cwd(),branch:'change',expected:${JSON.stringify(expected)}});`;
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd: f.root,
     env: f.env,

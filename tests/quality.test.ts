@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { ESLint } from 'eslint';
-import config from '../eslint/default.config.js';
+import config from '../eslint/default.config.ts';
 
 const eslint = new ESLint({
   overrideConfigFile: true,
@@ -78,7 +78,7 @@ test('em dashes in strings, templates and comments fail lint', async () => {
   );
 });
 
-test('the project type checker rejects a JavaScript type error', (t) => {
+test('the project type checker rejects a TypeScript type error', (t) => {
   const home = mkdtempSync(join(tmpdir(), 'deslop-typecheck-'));
   t.after(() =>
     rmSync(home, {
@@ -97,7 +97,7 @@ test('the project type checker rejects a JavaScript type error', (t) => {
     join(home, 'tsconfig.json'),
   );
   writeFileSync(
-    join(home, 'src/invalid.js'),
+    join(home, 'src/invalid.ts'),
     'const value = 1; value.toUpperCase();',
   );
   const result = spawnSync(

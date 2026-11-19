@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { reviewScope, codexFilesystem, claudeEdits } from '../src/scope.js';
-import { fixture } from './fixtures.js';
+import { reviewScope, codexFilesystem, claudeEdits } from '../src/scope.ts';
+import { fixture } from './fixtures.ts';
 
 test('only tracked instruction files in the diff gain write access and git stays read-only', async (t) => {
   const f = fixture(t);

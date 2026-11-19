@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { review } from '../src/review.js';
-import { fixture, nonDefectExamples } from './fixtures.js';
+import { review } from '../src/review.ts';
+import { fixture, nonDefectExamples } from './fixtures.ts';
 
 test('Claude honors the agent timeout and reports AGENT_TIMEOUT', async (t) => {
   const f = fixture(t);

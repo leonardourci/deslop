@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const module = new URL('../src/local.js', import.meta.url).href;
+const module = new URL('../src/local.ts', import.meta.url).href;
 
 function worker({
   home,
@@ -32,7 +32,7 @@ function worker({
   child.stderr.on('data', (chunk) => {
     stderr += chunk;
   });
-  const done = new Promise((resolve, reject) =>
+  const done = new Promise<void>((resolve, reject) =>
     child.on('exit', (code, signal) =>
       code === 0 || signal === 'SIGKILL'
         ? resolve()
@@ -42,7 +42,7 @@ function worker({
   done.catch(() => {});
   function wait(text) {
     if (stdout.includes(text)) return Promise.resolve();
-    return new Promise((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(
         () => reject(new Error(`No ${text}: ${stdout} ${stderr}`)),
         10000,

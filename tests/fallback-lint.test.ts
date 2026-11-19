@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fixture } from './fixtures.js';
+import { fixture } from './fixtures.ts';
 
 function lintFixture(t) {
   const f = fixture(t);

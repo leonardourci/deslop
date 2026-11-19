@@ -12,7 +12,8 @@ import {
 import { delimiter, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-const cli = fileURLToPath(new URL('../src/cli.js', import.meta.url));
+import type { Config, Provider } from '../src/types.ts';
+const cli = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 export function fixture(t) {
   const home = mkdtempSync(join(tmpdir(), 'deslop-test-'));
   t.after(() =>
@@ -31,7 +32,7 @@ export function fixture(t) {
     .find((path) => existsSync(path));
   symlinkSync(gitBin, join(bin, 'git'));
   symlinkSync(process.execPath, join(bin, 'node'));
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     HOME: home,
     USERPROFILE: home,
     XDG_CONFIG_HOME: join(home, 'config'),
@@ -173,8 +174,7 @@ if (args[0] === 'pr') {
       },
     ],
   });
-  /** @type {import('../src/types.js').Config & {reviewers: Record<string, import('../src/types.js').Provider>}} */
-  const config = {
+  const config: Config & { reviewers: Record<string, Provider> } = {
     fallbackLint: false,
     commands: { tests: 'node check.cjs' },
     kinds: [

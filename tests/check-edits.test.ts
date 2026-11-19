@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fixture } from './fixtures.js';
+import { fixture } from './fixtures.ts';
 
 const passed = (r) => assert.equal(r.status, 0, r.stdout + r.stderr);
 

@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { select, validateConfig, instructionsFor } from '../src/config.js';
-import { checkStates } from '../src/github.js';
-import { reviewerChoices, modelChoice, runningAgent } from '../src/review.js';
-import { fixture } from './fixtures.js';
+import { select, validateConfig, instructionsFor } from '../src/config.ts';
+import { checkStates } from '../src/github.ts';
+import { reviewerChoices, modelChoice, runningAgent } from '../src/review.ts';
+import { fixture } from './fixtures.ts';
+import type { Config } from '../src/types.ts';
 
 test('kinds select unioned requirements and built-ins can be overridden per repository', (t) => {
   const f = fixture(t);
@@ -71,7 +72,7 @@ test('kinds select unioned requirements and built-ins can be overridden per repo
         config: {
           ...config,
           mode: 'local',
-        },
+        } as Config,
       }),
     /unsupported/,
   );
@@ -141,7 +142,7 @@ test('CI selects newest named checks, excludes the marker and never passes missi
   s.checks = [];
   f.save(s);
   f.push();
-  const script = `import { waitForChecks } from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)}; const checks=await waitForChecks({cwd:process.cwd(),head:process.argv[1],names:['Tests'],timeoutMs:150,pollMs:1});console.log(JSON.stringify(checks));if(checks.every(c=>c.state==='success'))process.exit(0);process.exit(1);`;
+  const script = `import { waitForChecks } from ${JSON.stringify(new URL('../src/github.ts', import.meta.url).href)}; const checks=await waitForChecks({cwd:process.cwd(),head:process.argv[1],names:['Tests'],timeoutMs:150,pollMs:1});console.log(JSON.stringify(checks));if(checks.every(c=>c.state==='success'))process.exit(0);process.exit(1);`;
   const result = spawnSync(
     process.execPath,
     ['--input-type=module', '-e', script, f.git('rev-parse', 'HEAD')],
@@ -207,7 +208,7 @@ test('missing CI checks end at their appearance limit', (t) => {
   s.checks = [];
   f.save(s);
   f.push();
-  const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)}; console.log(JSON.stringify(await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],missingMs:0,timeoutMs:2000,pollMs:1})));`;
+  const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.ts', import.meta.url).href)}; console.log(JSON.stringify(await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],missingMs:0,timeoutMs:2000,pollMs:1})));`;
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd: f.root,
     env: f.env,
@@ -227,7 +228,7 @@ if(process.argv[2]==='repo')console.log(JSON.stringify({nameWithOwner:'example/p
     { mode: 0o755 },
   );
   f.push();
-  const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)}; await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],timeoutMs:1000,pollMs:1});`;
+  const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.ts', import.meta.url).href)}; await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],timeoutMs:1000,pollMs:1});`;
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd: f.root,
     env: f.env,
@@ -254,7 +255,7 @@ else console.log('[[]]');
       { mode: 0o755 },
     );
     f.push();
-  const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.js', import.meta.url).href)}; console.log(JSON.stringify(await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],timeoutMs:2000,pollMs:1})));`;
+  const script = `import {waitForChecks} from ${JSON.stringify(new URL('../src/github.ts', import.meta.url).href)}; console.log(JSON.stringify(await waitForChecks({cwd:process.cwd(),head:'head',names:['Tests'],timeoutMs:2000,pollMs:1})));`;
     const result = spawnSync(
       process.execPath,
       ['--input-type=module', '-e', script],
@@ -279,7 +280,7 @@ test('publication policy only accepts booleans and CI-required kinds need checks
         config: {
           ...f.config,
           publishLocal: 'yes',
-        },
+        } as unknown as Config,
       }),
     /publishLocal must be boolean/,
   );
@@ -295,7 +296,7 @@ test('publication policy only accepts booleans and CI-required kinds need checks
               ciRequired: 'yes',
             },
           ],
-        },
+        } as unknown as Config,
       }),
     /ciRequired must be boolean/,
   );

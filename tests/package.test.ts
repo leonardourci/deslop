@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, renameSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { fixture } from './fixtures.js';
+import { fixture } from './fixtures.ts';
 
 test('the installed package supplies its review skills and fallback lint', (t) => {
   const f = fixture(t);
@@ -17,7 +17,9 @@ test('the installed package supplies its review skills and fallback lint', (t) =
   const archive = JSON.parse(packed.stdout)[0].filename;
   const extracted = spawnSync('tar', ['-xzf', join(f.home, archive), '-C', f.home]);
   assert.equal(extracted.status, 0, extracted.stderr.toString());
-  const installed = join(f.home, 'package');
+  const installed = join(f.home, 'node_modules', 'deslop');
+  mkdirSync(join(f.home, 'node_modules'));
+  renameSync(join(f.home, 'package'), installed);
   symlinkSync(join(project, 'node_modules'), join(installed, 'node_modules'), 'dir');
   delete f.config.fallbackLint;
   f.config.checkFixAttempts = 0;
@@ -26,7 +28,7 @@ test('the installed package supplies its review skills and fallback lint', (t) =
   mkdirSync(join(f.root, 'src/__tests__'), { recursive: true });
   writeFileSync(join(f.root, 'src/__tests__/behavior.js'), 'export const present = true;');
   f.commit();
-  const run = spawnSync(process.execPath, [join(installed, 'src/cli.js'), 'run', '--reviewer', 'fixture'], {
+  const run = spawnSync(process.execPath, [join(installed, 'bin/deslop.js'), 'run', '--reviewer', 'fixture'], {
     cwd: f.root,
     env: f.env,
     encoding: 'utf8',

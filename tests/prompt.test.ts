@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
-import { requiredValue } from '../src/prompt.js';
+import { requiredValue } from '../src/prompt.ts';
 
 test('missing terminal input prompts and returns the entered value', async () => {
   const input = Object.assign(new PassThrough(), { isTTY: true });
