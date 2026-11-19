@@ -11,7 +11,7 @@ Deslop works on commits, without requiring a push or pull request. A dirty check
 
 The reviewer prompt's first section is the intent: the `--intent <file>` contents, otherwise the open PR's description read through `gh`, each capped like other prompt inputs. With neither, it states that no intent was supplied, so every code smell is unasked. Check-fix prompts repeat the same section. The run record names the intent source (`file` with its path, `pr` with its number, or `none`).
 
-Commands: `deslop run` (also bare `deslop`), `deslop clean <path>...`, `deslop init`, `deslop status`, `deslop skill copy <name>`, `deslop shape`. `skill copy` writes a shipped skill to `.agents/skills/<name>/SKILL.md` and refuses an existing file.
+Commands: `deslop run` (also bare `deslop`), `deslop clean <path>...`, `deslop init`, `deslop status`, `deslop skill copy <name>`, `deslop shape`. `skill copy` writes a shipped skill to `.agents/skills/<name>/SKILL.md` and refuses when that file or the `.claude` one exists.
 
 `deslop clean <path>...` replaces the branch diff with every tracked file under the given paths. The prompt lists those paths without their contents and the agent reads them itself, so no size cap applies. Kind selection, instruction grants and the lint scope use those files plus the run's own edits; checks, commit messages, check fixes, proof and default-branch refusal match `run`. The record has `mode: "clean"` and the given `paths`; `run` records have `mode: "run"`. Base selection is explicit `--base`, then an open PR's base branch, then origin's default branch, then local main/master. PR lookup is optional; local repositories work without GitHub.
 

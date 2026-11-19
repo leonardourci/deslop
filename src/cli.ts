@@ -184,15 +184,19 @@ function copySkill({
   places: Places;
   positionals: string[];
 }) {
-  const name = canonicalSkill(positionals[1] || '');
-  if (positionals[0] !== 'copy' || positionals.length !== 2 || !Object.hasOwn(DEFAULT_SKILLS, name))
+  const [action, requested, ...extra] = positionals;
+  const name = canonicalSkill(requested ?? '');
+  if (action !== 'copy' || extra.length || !Object.hasOwn(DEFAULT_SKILLS, name))
     throw new DeslopError(
       'USAGE',
       `Use deslop skill copy <name> with one of: ${Object.keys(DEFAULT_SKILLS).join(', ')}`,
     );
-  const target = join(places.root, '.agents', 'skills', name, 'SKILL.md');
-  if (existsSync(target))
-    throw new DeslopError('SKILL_EXISTS', `${target} already exists`);
+  const [target, existing] = ['.agents', '.claude'].map((folder) =>
+    join(places.root, folder, 'skills', name, 'SKILL.md'),
+  );
+  for (const file of [target, existing])
+    if (existsSync(file))
+      throw new DeslopError('SKILL_EXISTS', `${file} already exists`);
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, readFileSync(DEFAULT_SKILLS[name]), { flag: 'wx' });
   console.log(`wrote: ${target}\nnext: edit it and commit; it replaces the shipped ${name}`);

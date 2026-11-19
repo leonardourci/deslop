@@ -753,6 +753,10 @@ test('skill copy starts a repo override from the shipped skill and never overwri
   writeFileSync(target, 'Edited rules');
   failed(f.call('skill', 'copy', 'kill-ai-slop'), 'SKILL_EXISTS');
   assert.equal(readFileSync(target, 'utf8'), 'Edited rules');
+  mkdirSync(join(f.root, '.claude', 'skills', 'review-code'), { recursive: true });
+  writeFileSync(join(f.root, '.claude', 'skills', 'review-code', 'SKILL.md'), 'Claude rules');
+  failed(f.call('skill', 'copy', 'review-code'), 'SKILL_EXISTS');
+  assert.equal(existsSync(join(f.root, '.agents', 'skills', 'review-code')), false);
   failed(f.call('skill', 'copy', 'unknown'), 'USAGE');
   failed(f.call('skill', 'paste', 'review-code'), 'USAGE');
 });
