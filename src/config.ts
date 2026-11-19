@@ -1,8 +1,10 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import picomatch from 'picomatch';
 import { git, DeslopError } from './process.ts';
+import { regularFile } from './scope.ts';
 import type { Config, Kind, ModelChoice, Places, Selection, Settings } from './types.ts';
 import {
   DEFAULT_SKILLS,
@@ -282,12 +284,28 @@ export function loadSettings({ home }: { home: string }): Settings {
   return settings;
 }
 function repoSkills({ root }: { root: string }) {
+  const candidates = Object.keys(DEFAULT_SKILLS).flatMap((name) =>
+    ['.agents', '.claude'].map((folder) => ({
+      name,
+      path: `${folder}/skills/${name}/SKILL.md`,
+    })),
+  );
+  const tracked = new Set(
+    execFileSync('git', ['ls-files', '-z', '--', ...candidates.map(({ path }) => path)], {
+      cwd: root,
+      encoding: 'utf8',
+    }).split('\0'),
+  );
   const found: Record<string, string> = {};
-  for (const name of Object.keys(DEFAULT_SKILLS)) {
-    const file = ['.agents', '.claude']
-      .map((folder) => join(root, folder, 'skills', name, 'SKILL.md'))
-      .find((path) => existsSync(path));
-    if (file) found[name] = file;
+  for (const {
+    name,
+    path
+  } of candidates) {
+    const file = tracked.has(path) && regularFile({
+      cwd: root,
+      path,
+    });
+    if (file && !found[name]) found[name] = file;
   }
   return found;
 }

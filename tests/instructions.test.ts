@@ -98,6 +98,8 @@ test('repo skills named like shipped ones replace them, below the instructions m
   skill('.claude', 'kill-ai-slop', 'Claude cleanup rules');
   skill('.claude', 'review-code', 'Claude correctness rules');
   skill('.agents', 'audit-tests', 'Agents test rules');
+  skill('.agents', 'review-code', 'Ignored correctness rules');
+  writeFileSync(join(f.root, '.gitignore'), '.agents/skills/review-code/\n');
   writeFileSync(join(f.root, 'tests.md'), 'Mapped test rules');
   f.config.instructions = { 'audit-tests': 'tests.md' };
   f.configure();
@@ -107,7 +109,7 @@ test('repo skills named like shipped ones replace them, below the instructions m
   assert.match(prompt, /review-code:\nClaude correctness rules/);
   assert.match(prompt, /audit-tests:\nMapped test rules/);
   assert.match(prompt, /kill-ai-slop:\nAgents cleanup rules/);
-  assert.doesNotMatch(prompt, /Claude cleanup rules|Agents test rules|# Kill AI slop/);
+  assert.doesNotMatch(prompt, /Claude cleanup rules|Agents test rules|Ignored correctness rules|# Kill AI slop/);
 });
 
 test('machine skill overrides win over repo settings without changing the tree', (t) => {
