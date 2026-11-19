@@ -7,6 +7,8 @@ import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const installer = fileURLToPath(new URL('../docs/install.sh', import.meta.url));
+const latestApi = 'https://api.github.com/repos/leonardourci/deslop/releases/latest';
+const latestTag = 'v0.1.0-0123456789abcdef0123456789abcdef01234567';
 
 for (const scenario of [
   {
@@ -15,8 +17,18 @@ for (const scenario of [
   },
   {
     name: 'pinned',
-    tag: 'v0.1.0-0123456789abcdef0123456789abcdef01234567',
+    tag: 'v0.1.0-abcdef0123456789abcdef0123456789abcdef01',
     status: 0,
+  },
+  {
+    name: 'latest lookup failure',
+    failure: 'lookup',
+    status: 22,
+  },
+  {
+    name: 'latest metadata without a tag',
+    failure: 'metadata',
+    status: 1,
   },
   {
     name: 'an empty pin',
@@ -49,9 +61,11 @@ for (const scenario of [
     writeFileSync(join(bin, 'curl'), `#!${process.execPath}
 const fs = require('node:fs');
 const args = process.argv.slice(2);
-fs.writeFileSync(process.env.INSTALL_TEST_ROOT + '/url', args[1]);
-fs.writeFileSync(args[args.indexOf('-o') + 1], 'release tarball');
-if (process.env.INSTALL_TEST_FAILURE === 'download') process.exit(22);
+const api = args[1] === '${latestApi}';
+fs.appendFileSync(process.env.INSTALL_TEST_ROOT + '/url', args[1] + '\\n');
+const content = api ? JSON.stringify(process.env.INSTALL_TEST_FAILURE === 'metadata' ? {} : {tag_name: '${latestTag}'}) : 'release tarball';
+fs.writeFileSync(args[args.indexOf('-o') + 1], content);
+if (process.env.INSTALL_TEST_FAILURE === (api ? 'lookup' : 'download')) process.exit(22);
 `, { mode: 0o755 });
     writeFileSync(join(bin, 'npm'), `#!${process.execPath}
 const fs = require('node:fs');
@@ -80,11 +94,14 @@ if (process.env.INSTALL_TEST_FAILURE === 'install') process.exit(7);
     if (scenario.tag === '') {
       assert.equal(existsSync(urlLog), false);
     } else {
-      const release = scenario.tag ? `download/${scenario.tag}` : 'latest/download';
-      assert.equal(readFileSync(urlLog, 'utf8'),
-        `https://github.com/leonardourci/deslop/releases/${release}/deslop.tgz`);
+      const urls = [];
+      if (!scenario.tag) urls.push(latestApi);
+      if (scenario.failure !== 'lookup' && scenario.failure !== 'metadata') {
+        urls.push(`https://github.com/leonardourci/deslop/releases/download/${scenario.tag ?? latestTag}/deslop.tgz`);
+      }
+      assert.deepEqual(readFileSync(urlLog, 'utf8').trim().split('\n'), urls);
     }
-    assert.equal(existsSync(join(root, 'installed')), scenario.tag !== '' && scenario.failure !== 'download');
+    assert.equal(existsSync(join(root, 'installed')), scenario.status === 0 || scenario.failure === 'install');
     assert.deepEqual(readdirSync(downloads), []);
   });
 }
