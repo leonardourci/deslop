@@ -124,6 +124,7 @@ async function agentEdits({
   }
   data.findings = existsSync(file) ? readFileSync(file, 'utf8') : '';
   save();
+  if (result) writeFileSync(join(dir, `agent-${turn}.log`), result.output);
   if ((await gitState({ cwd: places.root })) !== before)
     throw new DeslopError(
       'AGENT_GIT',
@@ -142,7 +143,6 @@ async function agentEdits({
       ...edited.filter((path) => path.startsWith('.github/workflows/')),
     ]),
   ];
-  writeFileSync(join(dir, `agent-${turn}.log`), result.output);
   return result.session;
 }
 export async function run({
@@ -655,13 +655,10 @@ function printSummary({
     console.log(`check: ${check.name} ${check.ok ? 'pass' : 'fail'}`);
   const findings = data.findings.trim();
   const lines = findings.split('\n').length;
-  console.log(
-    !findings
-      ? 'findings: none'
-      : lines > MAX_SUMMARY_LINES
-        ? `findings: ${lines} lines; read findings in ${path}`
-        : `findings:\n${findings}`,
-  );
+  if (!findings) console.log('findings: none');
+  else if (lines > MAX_SUMMARY_LINES)
+    console.log(`findings: ${lines} lines; read findings in ${path}`);
+  else console.log(`findings:\n${findings}`);
   if (data.left?.length) console.log(`left: ${data.left.join(', ')}`);
   if (data.unstableCommands?.length)
     console.log(`unstable commands: ${data.unstableCommands.join(', ')}`);

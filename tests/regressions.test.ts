@@ -25,7 +25,7 @@ test('a Codex failure after edits stops before fallback', (t) => {
   writeFileSync(
     join(f.bin, 'codex'),
     `#!/usr/bin/env node
-process.stdin.resume();process.stdin.on('end',()=>{require('node:fs').writeFileSync('work.txt','partial');process.exit(1);});
+process.stdin.resume();process.stdin.on('end',()=>{const fs=require('node:fs');fs.writeFileSync('work.txt','partial');fs.appendFileSync(process.env.DESLOP_FINDINGS_FILE,'partial finding\\n');process.exit(1);});
 `,
     { mode: 0o755 },
   );
@@ -40,6 +40,7 @@ process.stdin.resume();process.stdin.on('end',()=>{require('node:fs').writeFileS
   assert.equal(f.load().calls.length, 0);
   assert.equal(readFileSync(join(f.root, 'work.txt'), 'utf8'), 'partial');
   assert.deepEqual(f.runs()[0].commits, []);
+  assert.equal(f.runs()[0].findings, 'partial finding\n');
   assert.equal(f.call('status').status, 1);
 });
 
@@ -438,6 +439,10 @@ test('fresh check repairs receive earlier findings and paths and append their ow
   assert.match(r.stdout, /findings:\nearlier review finding\ncheck repair/);
   assert.match(r.stdout, /local, not pushed/);
   assert.equal(f.runs()[0].findings, 'earlier review finding\ncheck repair\n');
+  assert.deepEqual(
+    f.load().calls.map((call) => call.findings),
+    ['', 'earlier review finding\n'],
+  );
 });
 
 test('status publication timeouts preserve successful local proof', (t) => {

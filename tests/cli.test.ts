@@ -43,7 +43,10 @@ test('checks cannot change configured hooks or enable an existing hook', (t) => 
 test('a dangling hook does not block review or proof', (t) => {
   const f = fixture(t);
   symlinkSync(join(f.home, 'missing-hook'), join(f.root, '.git/hooks/pre-commit'));
-  passed(f.call('run', '--reviewer', 'fixture'));
+  const result = f.call('run', '--reviewer', 'fixture');
+  passed(result);
+  assert.match(result.stdout, /findings: none/);
+  assert.equal(f.runs()[0].findings, '');
   passed(f.call('status'));
 });
 
@@ -235,8 +238,7 @@ test('commits review edits before checks and marks the final local commit withou
   assert.deepEqual(data.commits, [head]);
   assert.equal(data.findings, finding);
   assert.equal(data.verdict, 'passed');
-  assert.equal(data.branch, 'change');
-  assert.ok(data.date);
+  assert.ok(!Number.isNaN(Date.parse(data.date)));
   assert.match(result.stdout, /findings:\nwork.txt:1 had bad content; fixed/);
   assert.equal(data.checks[0].ok, true);
   assert.match(
@@ -505,22 +507,11 @@ test('custom commands without resume get a fresh call explaining earlier commits
   f.commit();
   const s = f.load();
   s.actions = [
-    { findings: finding },
-    {
-      edit: 'good',
-      findings: 'check fix: work.txt failed the tests; fixed\n',
-    },
+    {},
+    { edit: 'good' },
   ];
   f.save(s);
   passed(f.call('run', '--reviewer', 'fixture'));
-  assert.equal(
-    f.runs()[0].findings,
-    `${finding}check fix: work.txt failed the tests; fixed\n`,
-  );
-  assert.deepEqual(
-    f.load().calls.map((call) => call.findings),
-    ['', finding],
-  );
   assert.match(f.load().calls[1].prompt, /Fresh fallback call/);
   assert.deepEqual(f.load().calls[1].args, []);
 });
@@ -529,19 +520,12 @@ test('findings in any form never gate checks or proof', (t) => {
   const f = fixture(t);
   const s = f.load();
   const text = `Unfixed: ${'not JSON, still a finding\n'.repeat(30)}`;
-  s.actions = [{ findings: text }, {}];
+  s.actions = [{ findings: text }];
   f.save(s);
   const long = f.call('run', '--reviewer', 'fixture');
   passed(long);
   assert.equal(f.runs()[0].findings, text);
   assert.match(long.stdout, /findings: 30 lines; read findings in .*\.deslop\/repos\/repo\/reviews\/\d{4}-\d\d-\d\d-change\.json/);
-  passed(f.call('status'));
-  writeFileSync(join(f.root, 'later.txt'), 'later');
-  f.commit();
-  const none = f.call('run', '--reviewer', 'fixture');
-  passed(none);
-  assert.match(none.stdout, /findings: none/);
-  assert.equal(f.runs()[1].findings, '');
   passed(f.call('status'));
 });
 

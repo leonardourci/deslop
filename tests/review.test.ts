@@ -105,6 +105,41 @@ test('a provider failure after editing stops before fallback', async (t) => {
   assert.equal(readFileSync(join(cwd, 'work.txt'), 'utf8'), 'partial');
 });
 
+test('a fallback provider starts from the findings text the failed one found', async (t) => {
+  const f = fixture(t);
+  const findings = join(f.home, 'findings.txt');
+  writeFileSync(findings, 'earlier\n');
+  const config = {
+    reviewers: {
+      first: {
+        command: [
+          process.execPath,
+          '-e',
+          "require('node:fs').appendFileSync(process.env.DESLOP_FINDINGS_FILE, 'discarded\\n'); process.exit(1)",
+        ],
+      },
+      fallback: {
+        command: [
+          process.execPath,
+          '-e',
+          "process.stdout.write(require('node:fs').readFileSync(process.env.DESLOP_FINDINGS_FILE, 'utf8'))",
+        ],
+      },
+    },
+  };
+  const result = await review({
+    cwd: f.root,
+    common: f.root,
+    choices: ['first', 'fallback'],
+    config,
+    settings: {},
+    prompt: '',
+    findings,
+    env: f.env,
+  });
+  assert.equal(result.output, 'earlier');
+});
+
 test('a custom provider without a session id receives prior-edit context', async (t) => {
   const cwd = mkdtempSync(join(tmpdir(), 'deslop-provider-'));
   t.after(() =>

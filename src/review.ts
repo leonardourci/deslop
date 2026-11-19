@@ -1,3 +1,4 @@
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirtyPaths, gitState } from './git.ts';
 import { execute, DeslopError } from './process.ts';
@@ -74,7 +75,7 @@ export function reviewPrompt({
   target: string;
   findings: string;
 }) {
-  return `${intentSection({ intent })}\n${editorContract({ findings })}\nFollow only the selected review instructions. Fix findings directly. No check results are supplied to this first review. Instructions:\n${instructions}\n\n${target}`;
+  return `${intentSection({ intent })}\n${editorContract({ findings })}\nFollow only the selected review instructions. No check results are supplied to this first review. Instructions:\n${instructions}\n\n${target}`;
 }
 export async function review({
   cwd,
@@ -125,6 +126,7 @@ export async function review({
       });
     let output,
       sessionId = session?.id;
+    const findingsBefore = existsSync(findings) ? readFileSync(findings, 'utf8') : '';
     let before;
     try {
       before = await providerState({ cwd });
@@ -303,6 +305,7 @@ export async function review({
       )
         throw error;
       if (!before || before !== (await providerState({ cwd }))) throw error;
+      writeFileSync(findings, findingsBefore);
       errors.push(`${provider}: ${error.message}`);
     }
   }
@@ -311,11 +314,8 @@ export async function review({
 
 const AGENT_TIMEOUT_MS = 15 * 60 * 1000;
 function reportedSession({ output }: { output: string }) {
-  try {
-    return JSON.parse(output)?.sessionId;
-  } catch {
-    return undefined;
-  }
+  const last = output.trim().split('\n').at(-1) ?? '';
+  return last.startsWith('{') ? JSON.parse(last).sessionId : undefined;
 }
 async function providerState({ cwd }: { cwd: string }) {
   if ((await dirtyPaths({ cwd })).length) return null;
