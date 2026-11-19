@@ -16,13 +16,13 @@ Apache-2.0 licensed.
 ### Pinned or always latest
 
 - Pinned: `npm install --save-dev github:leonardourci/deslop#<commit>`, then run `npx deslop`. The repo's lockfile keeps that commit until you change it.
-- Always latest: run `npx github:leonardourci/deslop` (for example `npx github:leonardourci/deslop clean src`). npx resolves the default branch through git on every run and installs the newest commit when it has moved; with npm 11 a second run after a push installed the new commit from the same npx cache. Each run pays a git lookup, plus an install when the branch moved.
+- Always latest: run `npx github:leonardourci/deslop` (for example `npx github:leonardourci/deslop clean src`). npx resolves the default branch through git on every run (checked with npm 11) and installs the newest commit when it has moved, so each run pays a git lookup, plus an install after a push.
 - Global: re-run `npm install -g github:leonardourci/deslop` to move to the newest commit. Do not use `npm update -g deslop`: it replaces this install with the unrelated `deslop` package on the npm registry.
 
 ## Commands
 
 - `deslop run` (or bare `deslop`): fresh review and fixes, checks, bounded check fixes, then proof. Dirty work stops with `commit or stash your changes first`. `--intent file` supplies what was asked.
-- `deslop clean <path>...`: review and fix the whole tracked files under the given paths instead of the branch diff, then run the same checks, commits and proof as `run`. It takes the same options as `run` and is refused on the default branch. The prompt lists the file paths and the agent reads each file itself, so there is no size limit. One PR per folder keeps reviews small, but nothing enforces it.
+- `deslop clean <path>...`: review and fix the whole tracked files under the given paths instead of the branch diff, then run the same checks, commits and proof as `run`. It takes the same options as `run` and is refused on the default branch. The prompt lists the file paths and the agent reads each file itself, so file size does not limit the prompt. One PR per folder keeps reviews small, but nothing enforces it.
 - `deslop init`: write repo config. `--command name="shell command"` and `--check "CI name"` are repeatable. `--config file` imports an existing config. It also writes `.github/pull_request_template.md` with three short sections (what was asked, including any explicitly requested workaround; what changed; how it was checked) when the repo has no PR template; `--no-pr-template` skips it. The template is optional: `--intent` or any PR description works without it. Missing required values prompt in a terminal and name the missing flag otherwise. No workflow is installed.
 - `deslop status`: read the current commit's git note. `--publish` publishes its GitHub commit status if that final commit is pushed.
 - `deslop skill copy <name>`: copy a shipped skill to `.agents/skills/<name>/SKILL.md` so the repo can tweak it. It refuses when that file or the matching `.claude/skills/<name>/SKILL.md` already exists.
