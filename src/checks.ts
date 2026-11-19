@@ -1,13 +1,17 @@
-import { execute } from './process.js';
+import { execute } from './process.ts';
 import { createWriteStream, readFileSync, writeFileSync } from 'node:fs';
 import { finished } from 'node:stream/promises';
 import { join, relative } from 'node:path';
-import { lintInvocation } from './lint.js';
-import { github, repository, waitForChecks } from './github.js';
+import { lintInvocation } from './lint.ts';
+import { github, repository, waitForChecks } from './github.ts';
+import type { Check, Config, Selection } from './types.ts';
 
 export function failureDetails({
   name,
   output
+}: {
+  name: string;
+  output: string;
 }) {
   const lines = output.split('\n');
   const index = lines.findIndex((line) =>
@@ -31,7 +35,6 @@ export function failureDetails({
       .join('\n'),
   }));
 }
-/** @param {{cwd:string,name:string,command:string,file:string,args?:string[],input?:string}} options */
 async function commandCheck({
   args,
   input,
@@ -39,6 +42,13 @@ async function commandCheck({
   name,
   command,
   file
+}: {
+  cwd: string;
+  name: string;
+  command: string;
+  file: string;
+  args?: string[];
+  input?: string;
 }) {
   let ok = true;
   const log = createWriteStream(file);
@@ -77,7 +87,6 @@ async function commandCheck({
         }),
   };
 }
-/** @param {{cwd: string, dir: string, config: import('./types.js').Config, selection: import('./types.js').Selection, ci: boolean, head: string, attempt: number, beforeCommand?: (options: {command: string}) => Promise<void>, afterCommand?: (options: {command: string}) => Promise<void>, localCommands?: string[], paths?: Iterable<string>}} options */
 export async function runChecks({
   cwd,
   dir,
@@ -90,8 +99,20 @@ export async function runChecks({
   afterCommand,
   localCommands,
   paths = [],
+}: {
+  cwd: string;
+  dir: string;
+  config: Config;
+  selection: Selection;
+  ci: boolean;
+  head: string;
+  attempt: number;
+  beforeCommand?: (options: { command: string }) => Promise<void>;
+  afterCommand?: (options: { command: string }) => Promise<void>;
+  localCommands?: string[];
+  paths?: Iterable<string>;
 }) {
-  const checks = [];
+  const checks: Check[] = [];
   if (!ci) {
     for (const [index, name] of (
       localCommands || selection.commands

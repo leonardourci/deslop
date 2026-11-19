@@ -1,13 +1,10 @@
-#!/usr/bin/env node
 import {
   existsSync,
   mkdirSync,
   readFileSync,
-  realpathSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   CONFIG_FILE,
   locations,
@@ -16,14 +13,24 @@ import {
   loadConfig,
   loadSettings,
   select,
-} from './config.js';
-import { git, DeslopError } from './process.js';
-import { run } from './run.js';
-import { dirtyPaths, optionalGit } from './git.js';
-import { requiredValue } from './prompt.js';
-import { runningAgent } from './review.js';
-import { branchInfo } from './github.js';
-import { publishSuccess } from './publication.js';
+} from './config.ts';
+import { git, DeslopError } from './process.ts';
+import { run } from './run.ts';
+import { dirtyPaths, optionalGit } from './git.ts';
+import { requiredValue } from './prompt.ts';
+import { runningAgent } from './review.ts';
+import { branchInfo } from './github.ts';
+import { publishSuccess } from './publication.ts';
+import type { Places, RunOptions } from './types.ts';
+
+type CliOptions = RunOptions & {
+  publish?: boolean;
+  help?: boolean;
+  version?: boolean;
+  config?: string;
+  command?: string[];
+  check?: string[];
+};
 
 const SHAPE = {
   verdict: 'passed|failed',
@@ -69,6 +76,9 @@ const SHAPE = {
 async function init({
   places,
   options
+}: {
+  places: Places;
+  options: CliOptions;
 }) {
   const target = join(places.root, CONFIG_FILE);
   if (existsSync(target))
@@ -129,6 +139,9 @@ async function init({
 async function status({
   places,
   options
+}: {
+  places: Places;
+  options: CliOptions;
 }) {
   const cwd = places.root,
     head = await git({
@@ -227,6 +240,9 @@ async function status({
 export async function main({
   argv = process.argv.slice(2),
   cwd = process.cwd(),
+}: {
+  argv?: string[];
+  cwd?: string;
 } = {}) {
   const args = argv.flatMap((arg) =>
     arg.startsWith('--') && arg.includes('=')
@@ -234,7 +250,7 @@ export async function main({
       : [arg === '-h' ? '--help' : arg],
   );
   const command = args[0] && !args[0].startsWith('-') ? args.shift() : 'run';
-  const options = {};
+  const options: CliOptions = {};
   const booleans = ['local', 'publish', 'help', 'version'];
   const values = [
     'base',
@@ -322,13 +338,8 @@ export async function main({
   });
   if (result.verdict !== 'passed') process.exitCode = 1;
 }
-if (
-  process.argv[1] &&
-  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
-) {
-  main().catch((error) => {
-    console.error(error.message);
-    if (error.code !== 'DIRTY') console.error(`code: ${error.code || 'ERROR'}`);
-    process.exitCode = 1;
-  });
-}
+main().catch((error) => {
+  console.error(error.message);
+  if (error.code !== 'DIRTY') console.error(`code: ${error.code || 'ERROR'}`);
+  process.exitCode = 1;
+});

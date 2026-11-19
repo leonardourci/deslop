@@ -1,10 +1,10 @@
 import js from '@eslint/js';
+import type { Linter } from 'eslint';
 import globals from 'globals';
 import ts from 'typescript-eslint';
-import { entriesOnLines, noEmDash } from './rules.js';
+import { entriesOnLines, noEmDash } from './rules.ts';
 
-/** @type {import('eslint').Linter.Config[]} */
-const config = [
+const config: Linter.Config[] = [
   {
     ignores: [
       'node_modules/**',

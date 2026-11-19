@@ -1,12 +1,17 @@
 import { fileURLToPath } from 'node:url';
-import { regularFile } from './scope.js';
+import { regularFile } from './scope.ts';
+import type { Config, Selection } from './types.ts';
 
-/** @param {{cwd:string, config:import('./types.js').Config, selection:import('./types.js').Selection, paths:Iterable<string>}} options */
 export function lintInvocation({
   cwd,
   config,
   selection,
   paths
+}: {
+  cwd: string;
+  config: Config;
+  selection: Selection;
+  paths: Iterable<string>;
 }) {
   if (config.fallbackLint === false) return null;
   const lintName = /\b(?:eslint|lint)(?::[\w-]+)?\b/i;
@@ -28,7 +33,7 @@ export function lintInvocation({
   if (!files.length) return null;
   return {
     command: process.execPath,
-    args: [fileURLToPath(new URL('./lint-worker.js', import.meta.url))],
+    args: [fileURLToPath(new URL('../bin/lint-worker.js', import.meta.url))],
     input: JSON.stringify({
       cwd,
       files

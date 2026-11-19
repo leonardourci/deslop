@@ -7,24 +7,25 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { git, DeslopError } from './process.js';
-import { loadConfig, loadSettings, select, instructionsFor } from './config.js';
-import { branchInfo, remoteHead, pushFixes, commitStatus } from './github.js';
-import { reviewerChoices, reviewPrompt, review } from './review.js';
-import { publishSuccess } from './publication.js';
-import { repoHasTests } from './instructions.js';
-import { runChecks } from './checks.js';
-import { dirtyPaths, optionalGit, gitState } from './git.js';
-import { exclusiveRun } from './local.js';
+import { git, DeslopError } from './process.ts';
+import { loadConfig, loadSettings, select, instructionsFor } from './config.ts';
+import { branchInfo, remoteHead, pushFixes, commitStatus } from './github.ts';
+import { reviewerChoices, reviewPrompt, review } from './review.ts';
+import { publishSuccess } from './publication.ts';
+import { repoHasTests } from './instructions.ts';
+import { runChecks } from './checks.ts';
+import { dirtyPaths, optionalGit, gitState } from './git.ts';
+import { exclusiveRun } from './local.ts';
 import {
   reviewScope,
   assertInstructionScope,
   instructionPath,
   regularFile,
-} from './scope.js';
-import { EDITOR_CONTRACT } from './editor-contract.js';
+} from './scope.ts';
+import { EDITOR_CONTRACT } from './editor-contract.ts';
+import type { Config, Places, RunData, RunOptions, Session, Settings } from './types.ts';
 
-async function cleanTree({ cwd }) {
+async function cleanTree({ cwd }: { cwd: string }) {
   if ((await dirtyPaths({ cwd })).length)
     throw new DeslopError('DIRTY', 'commit or stash your changes first');
 }
@@ -32,6 +33,10 @@ async function commitEdits({
   cwd,
   message,
   data
+}: {
+  cwd: string;
+  message: string;
+  data: RunData;
 }) {
   if (!(await dirtyPaths({ cwd })).length) return false;
   const added = (
@@ -59,7 +64,6 @@ async function commitEdits({
   );
   return true;
 }
-/** @param {{places: import('./types.js').Places, options: import('./types.js').RunOptions, config: import('./types.js').Config, settings: import('./types.js').Settings, choices: string[], prompt: string, session?: import('./types.js').Session, data: import('./types.js').RunData, dir: string, turn: number, base: string}} options */
 async function agentEdits({
   places,
   options,
@@ -72,6 +76,18 @@ async function agentEdits({
   dir,
   turn,
   base,
+}: {
+  places: Places;
+  options: RunOptions;
+  config: Config;
+  settings: Settings;
+  choices: string[];
+  prompt: string;
+  session?: Session;
+  data: RunData;
+  dir: string;
+  turn: number;
+  base: string;
 }) {
   const before = await gitState({ cwd: places.root });
   const scope = await reviewScope({
@@ -136,6 +152,9 @@ async function agentEdits({
 export async function run({
   places,
   options
+}: {
+  places: Places;
+  options: RunOptions;
 }) {
   await cleanTree({ cwd: places.root });
   return await exclusiveRun({
@@ -150,6 +169,9 @@ export async function run({
 async function performRun({
   places,
   options
+}: {
+  places: Places;
+  options: RunOptions;
 }) {
   const cwd = places.root;
   await cleanTree({ cwd });
@@ -191,7 +213,7 @@ async function performRun({
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(root, '.gitignore'), '*\n');
   const file = join(dir, 'run.json');
-  const data = {
+  const data: RunData = {
     id: runId,
     verdict: 'running',
     initialHead,
@@ -208,7 +230,7 @@ async function performRun({
   };
   if (remoteError)
     data.remoteWarning = 'origin unreachable; ran local commands';
-  const redHeads = new Set();
+  const redHeads = new Set<string>();
   const invalidateVerdict = async ({ head }) => {
     for (const commit of new Set([initialHead, head])) {
       if (redHeads.has(commit)) continue;
@@ -628,6 +650,9 @@ async function performRun({
 function printSummary({
   data,
   path
+}: {
+  data: RunData;
+  path: string;
 }) {
   if (data.remoteWarning) console.log(data.remoteWarning);
   console.log(`verdict: ${data.verdict}`);
@@ -657,6 +682,9 @@ const MAX_CONTENT_BYTES = 128 * 1024;
 async function dirtyCommitPaths({
   cwd,
   commits
+}: {
+  cwd: string;
+  commits: string[];
 }) {
   const paths = await Promise.all(
     commits.map((commit) =>
@@ -674,6 +702,10 @@ async function invalidate({
   cwd,
   head,
   branch
+}: {
+  cwd: string;
+  head: string;
+  branch: string;
 }) {
   await optionalGit({
     cwd,

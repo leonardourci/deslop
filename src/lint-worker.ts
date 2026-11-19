@@ -3,11 +3,14 @@ import { dirname, join } from 'node:path';
 import { ESLint } from 'eslint';
 import { FlatCompat } from '@eslint/eslintrc';
 import js from '@eslint/js';
-import shipped from '../eslint/default.config.js';
+import shipped from '../eslint/default.config.ts';
 
 function repoConfig({
   cwd,
   file
+}: {
+  cwd: string;
+  file: string;
 }) {
   let directory = dirname(file);
   for (;;) {
@@ -55,8 +58,14 @@ for await (const chunk of process.stdin) input += chunk;
 const {
   cwd,
   files
+}: {
+  cwd: string;
+  files: string[];
 } = JSON.parse(input);
-const groups = new Map();
+const groups = new Map<string, {
+  config: ReturnType<typeof repoConfig>;
+  files: string[];
+}>();
 for (const file of files) {
   const config = repoConfig({
     cwd,
@@ -69,14 +78,12 @@ for (const file of files) {
   });
   groups.get(key).files.push(file);
 }
-/** @type {import('eslint').ESLint.LintResult[]} */
-const results = [];
+const results: ESLint.LintResult[] = [];
 for (const {
   config,
   files: scope
 } of groups.values()) {
-  /** @type {import('eslint').ESLint.Options} */
-  let options;
+  let options: ESLint.Options;
   if (!config)
     options = {
       cwd,

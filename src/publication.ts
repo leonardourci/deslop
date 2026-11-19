@@ -1,4 +1,5 @@
-import { commitStatus, readChecks, remoteHead } from './github.js';
+import { commitStatus, readChecks, remoteHead } from './github.ts';
+import type { Config, Selection } from './types.ts';
 
 export async function publishSuccess({
   cwd,
@@ -7,6 +8,13 @@ export async function publishSuccess({
   config,
   selection,
   local = false,
+}: {
+  cwd: string;
+  head: string;
+  branch: string;
+  config: Config;
+  selection: Pick<Selection, 'checks' | 'requiredChecks'>;
+  local?: boolean;
 }) {
   if (local && !config.publishLocal)
     return {

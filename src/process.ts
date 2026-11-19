@@ -1,22 +1,17 @@
 import { spawn } from 'node:child_process';
+import type { Writable } from 'node:stream';
 
 export class DeslopError extends Error {
-  /** @type {string|undefined} */
-  stdout;
-  /** @type {string|undefined} */
-  stderr;
-  /** @type {number|null|undefined} */
-  status;
-  constructor(code, message) {
+  stdout: string | undefined;
+  stderr: string | undefined;
+  status: number | null | undefined;
+  code: string;
+  constructor(code: string, message: string) {
     super(message);
     this.code = code;
   }
 }
 
-/**
- * @param {{command: string, args?: string[], cwd?: string, input?: string, env?: NodeJS.ProcessEnv, log?: import('node:stream').Writable, timeoutMs?: number, timeoutCode?: string}} options
- * @returns {Promise<string>}
- */
 export async function execute({
   command,
   args = [],
@@ -26,7 +21,16 @@ export async function execute({
   log,
   timeoutMs = 15 * 60 * 1000,
   timeoutCode = 'COMMAND_TIMEOUT',
-}) {
+}: {
+  command: string;
+  args?: string[];
+  cwd?: string;
+  input?: string;
+  env?: NodeJS.ProcessEnv;
+  log?: Writable;
+  timeoutMs?: number;
+  timeoutCode?: string;
+}): Promise<string> {
   return await new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
@@ -143,6 +147,9 @@ export async function execute({
 export async function git({
   cwd,
   args
+}: {
+  cwd: string;
+  args: string[];
 }) {
   return await execute({
     cwd,

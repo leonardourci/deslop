@@ -1,5 +1,6 @@
-/** @type {import('eslint').Rule.RuleModule} */
-export const entriesOnLines = {
+import type { Rule } from 'eslint';
+
+export const entriesOnLines: Rule.RuleModule = {
   meta: {
     type: 'layout',
     fixable: 'whitespace',
@@ -61,8 +62,7 @@ export const entriesOnLines = {
   },
 };
 
-/** @type {import('eslint').Rule.RuleModule} */
-export const noEmDash = {
+export const noEmDash: Rule.RuleModule = {
   meta: {
     type: 'suggestion',
     schema: [],

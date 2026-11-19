@@ -2,35 +2,36 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import picomatch from 'picomatch';
-import { git, DeslopError } from './process.js';
+import { git, DeslopError } from './process.ts';
+import type { Config, Kind, ModelChoice, Places, Selection, Settings } from './types.ts';
 import {
   DEFAULT_SKILLS,
   canonicalSkill,
   defaultSkills,
   instructionPaths,
-} from './instructions.js';
+} from './instructions.ts';
 
 export const CONFIG_FILE = 'deslop.config.json';
-function fail(message) {
+function fail(message: string): never {
   throw new DeslopError('CONFIG', message);
 }
-function object(value) {
+function object(value: unknown) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
-function strings(value) {
+function strings(value: unknown) {
   return (
     Array.isArray(value) &&
     value.every((item) => typeof item === 'string' && item.trim())
   );
 }
-export function readJson({ path }) {
+export function readJson({ path }: { path: string }) {
   try {
     return JSON.parse(readFileSync(path, 'utf8'));
   } catch (error) {
     fail(`Cannot read ${path}: ${error.message}`);
   }
 }
-export function validateModels({ models = {} }) {
+export function validateModels({ models = {} }: { models?: Record<string, ModelChoice> }) {
   if (!object(models)) fail('reviewerModels must be an object');
   for (const [provider, choice] of Object.entries(models)) {
     if (
@@ -46,6 +47,9 @@ export function validateModels({ models = {} }) {
 export function validateConfig({
   config,
   root
+}: {
+  config: Config;
+  root: string;
 }) {
   const keys = [
     'commands',
@@ -88,7 +92,7 @@ export function validateConfig({
     });
   if (!Array.isArray(config.kinds) || !config.kinds.length)
     fail('kinds must be nonempty');
-  const names = new Set();
+  const names = new Set<string>();
   for (const kind of config.kinds) {
     if (
       !object(kind) ||
@@ -145,9 +149,13 @@ export function select({
   config,
   paths,
   hasTests = false
+}: {
+  config: Config;
+  paths: Iterable<string>;
+  hasTests?: boolean;
 }) {
-  const selected = new Set();
-  const instructions = new Set();
+  const selected = new Set<Kind>();
+  const instructions = new Set<string>();
   for (const path of paths) {
     const kind = config.kinds.find((kind) =>
       picomatch(kind.match, { dot: true })(path),
@@ -185,6 +193,10 @@ export function instructionsFor({
   root,
   config,
   selection
+}: {
+  root: string;
+  config: Config;
+  selection: Selection;
 }) {
   const paths = {
     ...DEFAULT_SKILLS,
@@ -201,6 +213,9 @@ export function instructionsFor({
 function validateInstructions({
   instructions,
   root
+}: {
+  instructions: Record<string, string | false>;
+  root: string;
 }) {
   if (!object(instructions))
     fail('instructions must map skill names to files or false');
@@ -217,6 +232,9 @@ function validateInstructions({
 export async function locations({
   cwd,
   env = process.env
+}: {
+  cwd: string;
+  env?: NodeJS.ProcessEnv;
 }) {
   const root = await git({
     cwd,
@@ -244,7 +262,7 @@ export async function locations({
     lock,
   };
 }
-export function loadSettings({ home }) {
+export function loadSettings({ home }: { home: string }): Settings {
   const file = join(home, 'settings.json');
   const settings = existsSync(file) ? readJson({ path: file }) : {};
   if (
@@ -266,6 +284,9 @@ export function loadSettings({ home }) {
 export function loadConfig({
   places,
   env = process.env
+}: {
+  places: Places;
+  env?: NodeJS.ProcessEnv;
 }) {
   const file = join(places.root, CONFIG_FILE);
   if (!existsSync(file)) fail('No config; run deslop init');

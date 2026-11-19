@@ -1,9 +1,9 @@
 import { mkdirSync, readdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import { DeslopError } from './process.js';
+import { DeslopError } from './process.ts';
 
-function alive({ pid }) {
+function alive({ pid }: { pid: number }) {
   if (!Number.isInteger(pid) || pid <= 0) return true;
   try {
     process.kill(pid, 0);
@@ -13,9 +13,12 @@ function alive({ pid }) {
   }
 }
 
-export async function exclusiveRun({
+export async function exclusiveRun<T>({
   file,
   work
+}: {
+  file: string;
+  work: () => Promise<T>;
 }) {
   const owner = `${process.pid}-${randomUUID()}`;
   const prepared = `${file}.${owner}`;

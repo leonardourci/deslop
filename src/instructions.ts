@@ -1,7 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import picomatch from 'picomatch';
-import { git } from './process.js';
+import { git } from './process.ts';
+import type { Config, Kind } from './types.ts';
 
 export const DEFAULT_SKILLS = Object.fromEntries(
   ['review-code', 'audit-tests', 'kill-ai-slop'].map((name) => [
@@ -24,7 +25,7 @@ const testFile = picomatch(
   { dot: true },
 );
 
-export function canonicalSkill(name) {
+export function canonicalSkill(name: string) {
   return Object.hasOwn(aliases, name) ? aliases[name] : name;
 }
 
@@ -32,6 +33,10 @@ export function defaultSkills({
   kind,
   path,
   hasTests
+}: {
+  kind: Kind;
+  path: string;
+  hasTests: boolean;
 }) {
   if (
     ['docs', 'prose'].includes(kind.name) ||
@@ -46,6 +51,9 @@ export function defaultSkills({
 export function instructionPaths({
   root,
   instructions = {}
+}: {
+  root: string;
+  instructions?: Record<string, string | false>;
 }) {
   return Object.fromEntries(
     Object.entries(instructions).map(([name, file]) => [
@@ -58,6 +66,9 @@ export function instructionPaths({
 export async function repoHasTests({
   cwd,
   config
+}: {
+  cwd: string;
+  config: Pick<Config, 'commands'> & { kinds: Pick<Kind, 'name' | 'match'>[] };
 }) {
   if (
     Object.hasOwn(config.commands, 'test') ||

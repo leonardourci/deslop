@@ -1,13 +1,18 @@
 import { createInterface } from 'node:readline/promises';
-import { DeslopError } from './process.js';
+import { DeslopError } from './process.ts';
 
-/** @param {{value?: string, flag: string, question: string, input?: NodeJS.ReadableStream & {isTTY?: boolean}, output?: NodeJS.WritableStream}} options */
 export async function requiredValue({
   value,
   flag,
   question,
   input = process.stdin,
   output = process.stdout,
+}: {
+  value?: string;
+  flag: string;
+  question: string;
+  input?: NodeJS.ReadableStream & { isTTY?: boolean };
+  output?: NodeJS.WritableStream;
 }) {
   if (value) return value;
   if (!input.isTTY)

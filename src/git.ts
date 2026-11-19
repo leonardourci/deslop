@@ -1,11 +1,14 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { git } from './process.js';
+import { git } from './process.ts';
 
 export async function optionalGit({
   cwd,
   args
+}: {
+  cwd: string;
+  args: string[];
 }) {
   try {
     return await git({
@@ -18,7 +21,7 @@ export async function optionalGit({
   }
 }
 
-export async function dirtyPaths({ cwd }) {
+export async function dirtyPaths({ cwd }: { cwd: string }) {
   const output = await git({
     cwd,
     args: ['status', '--porcelain', '-z', '--untracked-files=all'],
@@ -31,7 +34,7 @@ export async function dirtyPaths({ cwd }) {
   }
   return paths;
 }
-export async function gitState({ cwd }) {
+export async function gitState({ cwd }: { cwd: string }) {
   const branch = await git({
     cwd,
     args: ['symbolic-ref', '--short', 'HEAD'],
@@ -41,8 +44,7 @@ export async function gitState({ cwd }) {
     ['symbolic-ref', 'HEAD'],
     ['ls-files', '--stage'],
   ];
-  /** @type {unknown[]} */
-  const values = await Promise.all(
+  const values: unknown[] = await Promise.all(
     commands.map((args) =>
       git({
         cwd,

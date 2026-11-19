@@ -1,11 +1,33 @@
-import { optionalGit } from './git.js';
-import { execute, git, DeslopError } from './process.js';
+import { optionalGit } from './git.ts';
+import { execute, git, DeslopError } from './process.ts';
 
-/** @param {{cwd: string, args: string[], input?: string}} options */
+type CheckRun = {
+  id: number;
+  name: string;
+  status: string;
+  conclusion?: string | null;
+  details_url?: string;
+};
+type CommitStatus = {
+  id: number;
+  context: string;
+  state: string;
+  target_url?: string | null;
+};
+type CheckState = {
+  name: string;
+  state: string;
+  url?: string | null;
+};
+
 export async function github({
   cwd,
   args,
   input
+}: {
+  cwd: string;
+  args: string[];
+  input?: string;
 }) {
   return await execute({
     cwd,
@@ -17,6 +39,9 @@ export async function github({
 export async function remoteHead({
   cwd,
   branch
+}: {
+  cwd: string;
+  branch: string;
 }) {
   try {
     return (
@@ -32,7 +57,7 @@ export async function remoteHead({
     return null;
   }
 }
-export async function repository({ cwd }) {
+export async function repository({ cwd }: { cwd: string }) {
   return JSON.parse(
     await github({
       cwd,
@@ -43,10 +68,12 @@ export async function repository({ cwd }) {
     }),
   ).nameWithOwner;
 }
-/** @param {{cwd: string, override?: string}} options */
 export async function branchInfo({
   cwd,
   override
+}: {
+  cwd: string;
+  override?: string;
 }) {
   const branch = await git({
     cwd,
@@ -120,6 +147,10 @@ export async function pushFixes({
   cwd,
   branch,
   expected
+}: {
+  cwd: string;
+  branch: string;
+  expected: string;
 }) {
   if (
     (await remoteHead({
@@ -144,8 +175,12 @@ export function checkStates({
   runs,
   statuses,
   names
+}: {
+  runs: CheckRun[];
+  statuses: CommitStatus[];
+  names: string[];
 }) {
-  const latest = new Map();
+  const latest = new Map<string, CheckState>();
   for (const run of [...runs].sort((a, b) => b.id - a.id)) {
     if (latest.has(`run:${run.name}`)) continue;
     latest.set(`run:${run.name}`, {
@@ -193,10 +228,17 @@ export async function waitForChecks({
   timeoutMs = CI_TIMEOUT_MS,
   pollMs = CI_POLL_MS,
   missingMs = CI_MISSING_MS,
+}: {
+  cwd: string;
+  head: string;
+  names: string[];
+  timeoutMs?: number;
+  pollMs?: number;
+  missingMs?: number;
 }) {
   const started = Date.now();
   const deadline = started + timeoutMs;
-  let checks = names.map((name) => ({
+  let checks: CheckState[] = names.map((name) => ({
     name,
     state: 'missing',
   }));
@@ -253,6 +295,12 @@ export async function commitStatus({
   branch,
   state,
   description
+}: {
+  cwd: string;
+  head: string;
+  branch: string;
+  state: string;
+  description: string;
 }) {
   if (
     (await remoteHead({
@@ -280,12 +328,16 @@ export async function commitStatus({
   return true;
 }
 
-/** @param {{cwd: string, head: string, names: string[], repo?: string}} options */
 export async function readChecks({
   cwd,
   head,
   names,
   repo
+}: {
+  cwd: string;
+  head: string;
+  names: string[];
+  repo?: string;
 }) {
   repo ||= await repository({ cwd });
   const [runs, statuses] = await Promise.all([

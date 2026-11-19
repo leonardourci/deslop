@@ -1,13 +1,17 @@
 import { existsSync, lstatSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve, relative, sep } from 'node:path';
-import { git, DeslopError } from './process.js';
+import { git, DeslopError } from './process.ts';
+import type { Config, Scope } from './types.ts';
 
 const INSTRUCTION_ROOTS = ['.agents', '.claude', '.codex', 'skills'];
-const split = (value) => value.split('\0').filter(Boolean);
+const split = (value: string) => value.split('\0').filter(Boolean);
 // Null unless the path is a regular file inside cwd, not reached through a symlinked directory.
 export function regularFile({
   cwd,
   path
+}: {
+  cwd: string;
+  path: string;
 }) {
   const absolute = resolve(cwd, path);
   if (!absolute.startsWith(cwd + sep) || !existsSync(absolute)) return null;
@@ -19,6 +23,9 @@ export function regularFile({
 export function instructionPath({
   path,
   configured = []
+}: {
+  path: string;
+  configured?: string[];
 }) {
   return (
     INSTRUCTION_ROOTS.includes(path.split('/')[0]) ||
@@ -29,6 +36,9 @@ export function instructionPath({
 function projectPath({
   cwd,
   path
+}: {
+  cwd: string;
+  path: string;
 }) {
   const absolute = resolve(cwd, path);
   if (
@@ -50,6 +60,10 @@ export async function reviewScope({
   cwd,
   base,
   config
+}: {
+  cwd: string;
+  base: string;
+  config: Config;
 }) {
   const [diff, tracked, ignored, untracked] = await Promise.all([
     git({
@@ -130,8 +144,12 @@ export function codexFilesystem({
   cwd,
   common,
   scope
+}: {
+  cwd: string;
+  common: string;
+  scope: Scope;
 }) {
-  const rules = {
+  const rules: Record<string, string> = {
     ':tmpdir': 'read',
     ':slash_tmp': 'read',
     [join(cwd, '.git')]: 'read',
@@ -149,8 +167,12 @@ export function claudeEdits({
   cwd,
   common,
   scope
+}: {
+  cwd: string;
+  common: string;
+  scope: Scope;
 }) {
-  const absolute = (path) => '/' + resolve(cwd, path);
+  const absolute = (path: string) => '/' + resolve(cwd, path);
   const allow = [
     `Edit(${absolute('*')})`,
     ...scope.normalDirectories.map((path) => `Edit(${absolute(path)}/**)`),
@@ -166,7 +188,7 @@ export function claudeEdits({
       (path) => !scope.instructionFiles.includes(path),
     ),
   ]);
-  const literalPath = (path) => absolute(path).replace(/[\\*?[\]]/g, '\\$&');
+  const literalPath = (path: string) => absolute(path).replace(/[\\*?[\]]/g, '\\$&');
   const deny = ['Bash', 'Agent'];
   for (const path of denied)
     deny.push(
@@ -190,6 +212,9 @@ export function claudeEdits({
 export async function assertInstructionScope({
   cwd,
   scope
+}: {
+  cwd: string;
+  scope: Scope;
 }) {
   const [diff, untracked] = await Promise.all([
     git({
