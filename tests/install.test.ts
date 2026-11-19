@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,7 +48,14 @@ for (const scenario of [
 ]) {
   test(`the release installer handles ${scenario.name} and removes its download`, (t) => {
     const root = mkdtempSync(join(tmpdir(), 'deslop-install-test-'));
+    const downloadDirectory = join(root, 'download-directory');
     t.after(() => {
+      if (existsSync(downloadDirectory)) {
+        rmSync(readFileSync(downloadDirectory, 'utf8'), {
+          recursive: true,
+          force: true,
+        });
+      }
       rmSync(root, {
         recursive: true,
         force: true,
@@ -64,7 +71,9 @@ const args = process.argv.slice(2);
 const api = args[1] === '${latestApi}';
 fs.appendFileSync(process.env.INSTALL_TEST_ROOT + '/url', args[1] + '\\n');
 const content = api ? JSON.stringify(process.env.INSTALL_TEST_FAILURE === 'metadata' ? {} : {tag_name: '${latestTag}'}) : 'release tarball';
-fs.writeFileSync(args[args.indexOf('-o') + 1], content);
+const output = args[args.indexOf('-o') + 1];
+fs.writeFileSync(process.env.INSTALL_TEST_ROOT + '/download-directory', require('node:path').dirname(output));
+fs.writeFileSync(output, content);
 if (process.env.INSTALL_TEST_FAILURE === (api ? 'lookup' : 'download')) process.exit(22);
 `, { mode: 0o755 });
     writeFileSync(join(bin, 'npm'), `#!${process.execPath}
@@ -102,6 +111,8 @@ if (process.env.INSTALL_TEST_FAILURE === 'install') process.exit(7);
       assert.deepEqual(readFileSync(urlLog, 'utf8').trim().split('\n'), urls);
     }
     assert.equal(existsSync(join(root, 'installed')), scenario.status === 0 || scenario.failure === 'install');
-    assert.deepEqual(readdirSync(downloads), []);
+    if (existsSync(downloadDirectory)) {
+      assert.equal(existsSync(readFileSync(downloadDirectory, 'utf8')), false);
+    }
   });
 }
