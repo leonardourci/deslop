@@ -9,6 +9,7 @@ import {
   symlinkSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { fixture, nonDefectExamples } from './fixtures.ts';
 function passed(result) {
@@ -639,7 +640,7 @@ test('init creates repo config without a workflow and shape works outside a repo
 test('installed executable symlinks invoke the command and removed flags are rejected', (t) => {
   const f = fixture(t);
   const bin = join(f.home, 'installed');
-  symlinkSync(f.cli, bin);
+  symlinkSync(fileURLToPath(new URL('../bin/deslop.js', import.meta.url)), bin);
   passed(
     spawnSync(process.execPath, [bin, 'shape'], {
       cwd: f.home,

@@ -237,7 +237,7 @@ async function status({
     }
   }
 }
-export async function main({
+async function main({
   argv = process.argv.slice(2),
   cwd = process.cwd(),
 }: {
