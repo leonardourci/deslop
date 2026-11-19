@@ -276,7 +276,7 @@ async function performRun({
       ? (
           await git({
             cwd,
-            args: ['ls-files', '-z', '--', ...options.paths.map((path) => resolve(path))],
+            args: ['ls-files', '-z', '--', ...options.paths],
           })
         )
           .split('\0')
@@ -600,6 +600,8 @@ async function performRun({
       verdict: 'passed',
       review: data.review,
       checks: finalChecks,
+      mode: data.mode,
+      paths: data.paths,
       ciChecks: finalSelection.checks,
       requiredCI: finalSelection.requiredChecks,
       commits: data.commits,

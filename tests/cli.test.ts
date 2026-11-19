@@ -674,12 +674,16 @@ test('clean reviews whole files by path with the same checks, commits and proof 
   const f = fixture(t);
   mkdirSync(join(f.root, 'lib'));
   writeFileSync(join(f.root, 'lib', 'old.txt'), 'old');
+  writeFileSync(join(f.root, '.gitignore'), 'lib/*.log\n');
   f.git('add', '.');
   f.git('commit', '-m', 'add lib');
   f.git('switch', 'main');
   failed(f.call('clean', 'lib', '--reviewer', 'fixture'), 'BRANCH');
   f.git('switch', 'change');
+  writeFileSync(join(f.root, 'lib', 'cache.log'), 'ignored');
   failed(f.call('clean', '--reviewer', 'fixture'), 'USAGE');
+  failed(f.call('clean', '..', '--reviewer', 'fixture'), 'USAGE');
+  failed(f.call('clean', 'missing', '--reviewer', 'fixture'), 'NO_CHANGES');
   const s = f.load();
   s.actions = [
     {
@@ -688,18 +692,24 @@ test('clean reviews whole files by path with the same checks, commits and proof 
     },
   ];
   f.save(s);
-  const result = f.call('clean', 'lib', 'base.txt', '--reviewer', 'fixture');
+  const result = spawnSync(process.execPath, [f.cli, 'clean', '.', '../base.txt', '--reviewer', 'fixture'], {
+    cwd: join(f.root, 'lib'),
+    env: f.env,
+    encoding: 'utf8',
+  });
   passed(result);
   const prompt = f.load().calls.at(-1).prompt;
-  assert.match(prompt, /Files to review and fix in full[^\n]*\nbase\.txt\nlib\/old\.txt\n/);
+  assert.match(prompt, /Files to review and fix in full[^\n]*\nbase\.txt\nlib\/old\.txt\nProject root:/);
   assert.doesNotMatch(prompt, /diff --git/);
   assert.equal(f.git('log', '-1', '--format=%s'), 'deslop: fix review findings');
   assert.equal(readFileSync(join(f.root, 'lib', 'old.txt'), 'utf8'), 'tidy');
-  const data = f.runs()[0];
+  const data = f.runs().at(-1);
   assert.equal(data.mode, 'clean');
   assert.deepEqual(data.paths, ['lib', 'base.txt']);
   assert.equal(data.checks[0].ok, true);
-  passed(f.call('status'));
+  const status = f.call('status');
+  passed(status);
+  assert.match(status.stdout, /scope: deslop clean lib base\.txt/);
 });
 
 test('init creates repo config without a workflow and shape works outside a repository', (t) => {

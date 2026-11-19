@@ -3,10 +3,11 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   CONFIG_FILE,
   locations,
@@ -243,7 +244,7 @@ async function status({
     return;
   }
   console.log(
-    `marker: current, head ${head}\ndetails: ${marker.run}\nshape: deslop shape\nlogs: checks[].log (full logs can be large)`,
+    `marker: current, head ${head}${marker.mode === 'clean' ? `\nscope: deslop clean ${marker.paths.join(' ')}` : ''}\ndetails: ${marker.run}\nshape: deslop shape\nlogs: checks[].log (full logs can be large)`,
   );
   if (options.publish) {
     const branch = await git({
@@ -390,6 +391,13 @@ async function main({
     return;
   }
   const places = await locations({ cwd });
+  if (options.paths)
+    options.paths = options.paths.map((path) => {
+      const inside = relative(places.root, resolve(realpathSync(cwd), path));
+      if (inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside))
+        throw new DeslopError('USAGE', `Path is outside the repository: ${path}`);
+      return inside || '.';
+    });
   if (command === 'init')
     return await init({
       places,

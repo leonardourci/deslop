@@ -6,6 +6,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -209,9 +210,10 @@ if (args[0] === 'pr') {
     });
   const reviews = join(home, 'deslop', 'reviews');
   const runs = () =>
-    readdirSync(reviews).map((name) =>
-      JSON.parse(readFileSync(join(reviews, name), 'utf8')),
-    );
+    readdirSync(reviews)
+      .map((name) => join(reviews, name))
+      .sort((a, b) => statSync(a).mtimeMs - statSync(b).mtimeMs)
+      .map((file) => JSON.parse(readFileSync(file, 'utf8')));
   const push = () => {
     const remote = join(home, 'remote.git');
     execFileSync('git', ['init', '--bare', remote], {
