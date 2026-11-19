@@ -6,13 +6,11 @@ if [ "$#" -gt 1 ]; then
   exit 2
 fi
 
-tag=${1-latest}
-
-temp_dir=$(mktemp -d)
+temp_dir=$(mktemp -d "${TMPDIR:-/tmp}/deslop.XXXXXXXX")
 trap 'rm -rf "$temp_dir"' 0
 trap 'exit 1' HUP INT TERM
 
-if [ "$tag" = latest ]; then
+if [ "$#" -eq 0 ]; then
   curl -fsSL https://api.github.com/repos/leonardourci/deslop/releases/latest \
     -H 'Cache-Control: no-cache' -o "$temp_dir/release.json"
   tag=$(node -e '
@@ -20,6 +18,8 @@ if [ "$tag" = latest ]; then
     if (typeof release.tag_name !== "string") throw new Error("Latest release has no tag");
     process.stdout.write(release.tag_name);
   ' "$temp_dir/release.json")
+else
+  tag=$1
 fi
 
 case "$tag" in
