@@ -721,6 +721,21 @@ test('init creates repo config without a workflow and shape works outside a repo
   assert.match(result.stdout, /20 lines/);
 });
 
+test('skill copy starts a repo override from the shipped skill and never overwrites one', (t) => {
+  const f = fixture(t);
+  const target = join(f.root, '.agents', 'skills', 'kill-ai-slop', 'SKILL.md');
+  passed(f.call('skill', 'copy', 'kill-ai-slop'));
+  assert.equal(
+    readFileSync(target, 'utf8'),
+    readFileSync(new URL('../skills/kill-ai-slop/SKILL.md', import.meta.url), 'utf8'),
+  );
+  writeFileSync(target, 'Edited rules');
+  failed(f.call('skill', 'copy', 'kill-ai-slop'), 'SKILL_EXISTS');
+  assert.equal(readFileSync(target, 'utf8'), 'Edited rules');
+  failed(f.call('skill', 'copy', 'unknown'), 'USAGE');
+  failed(f.call('skill', 'paste', 'review-code'), 'USAGE');
+});
+
 test('installed executable symlinks invoke the command and removed flags are rejected', (t) => {
   const f = fixture(t);
   const bin = join(f.home, 'installed');

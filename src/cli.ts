@@ -18,6 +18,7 @@ import { git, DeslopError } from './process.ts';
 import { run } from './run.ts';
 import { dirtyPaths, optionalGit } from './git.ts';
 import { requiredValue } from './prompt.ts';
+import { DEFAULT_SKILLS, canonicalSkill } from './instructions.ts';
 import { runningAgent } from './review.ts';
 import { branchInfo } from './github.ts';
 import { publishSuccess } from './publication.ts';
@@ -145,6 +146,26 @@ async function init({
   console.log(
     `wrote: ${target}\nnext: configure commands and kinds, then commit before running deslop`,
   );
+}
+function copySkill({
+  places,
+  positionals
+}: {
+  places: Places;
+  positionals: string[];
+}) {
+  const name = canonicalSkill(positionals[1] || '');
+  if (positionals[0] !== 'copy' || positionals.length !== 2 || !Object.hasOwn(DEFAULT_SKILLS, name))
+    throw new DeslopError(
+      'USAGE',
+      `Use deslop skill copy <name> with one of: ${Object.keys(DEFAULT_SKILLS).join(', ')}`,
+    );
+  const target = join(places.root, '.agents', 'skills', name, 'SKILL.md');
+  if (existsSync(target))
+    throw new DeslopError('SKILL_EXISTS', `${target} already exists`);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, readFileSync(DEFAULT_SKILLS[name]), { flag: 'wx' });
+  console.log(`wrote: ${target}\nnext: edit it and commit; it replaces the shipped ${name}`);
 }
 async function status({
   places,
@@ -301,7 +322,7 @@ async function main({
   if (command === 'help') options.help = true;
   if (options.help) {
     console.log(
-      'deslop [run] [--local] [--base ref] [--intent file] [--reviewer provider] [--reviewer-model name] [--reviewer-effort effort]\ndeslop clean <path>... [run options]\ndeslop init [--config file | --command name=command --check name]\ndeslop status [--publish]\ndeslop shape',
+      'deslop [run] [--local] [--base ref] [--intent file] [--reviewer provider] [--reviewer-model name] [--reviewer-effort effort]\ndeslop clean <path>... [run options]\ndeslop init [--config file | --command name=command --check name]\ndeslop status [--publish]\ndeslop skill copy <name>\ndeslop shape',
     );
     return;
   }
@@ -310,6 +331,7 @@ async function main({
     clean: ['local', 'base', 'intent', 'reviewer', 'reviewerModel', 'reviewerEffort'],
     init: ['config', 'command', 'check'],
     status: ['publish'],
+    skill: [],
     shape: [],
   };
   if (!allowed[command])
@@ -324,7 +346,7 @@ async function main({
     if (!positionals.length)
       throw new DeslopError('USAGE', 'Name at least one path: deslop clean <path>...');
     options.paths = positionals;
-  } else if (positionals.length)
+  } else if (positionals.length && command !== 'skill')
     throw new DeslopError('USAGE', `Unexpected argument: ${positionals[0]}`);
   if (command === 'shape') {
     console.log(JSON.stringify(SHAPE, null, 2));
@@ -338,6 +360,11 @@ async function main({
     return await init({
       places,
       options,
+    });
+  if (command === 'skill')
+    return copySkill({
+      places,
+      positionals,
     });
   if (command === 'status')
     return await status({
