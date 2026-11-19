@@ -722,10 +722,14 @@ test('init creates repo config without a workflow and shape works outside a repo
   };
   rmSync(template);
   mkdirSync(join(f.root, 'docs'));
-  writeFileSync(join(f.root, 'docs', 'PULL_REQUEST_TEMPLATE.md'), 'Our template');
+  writeFileSync(join(f.root, 'docs', 'PULL_REQUEST_TEMPLATE.txt'), 'Our template');
   reinit();
   assert.equal(existsSync(template), false);
   rmSync(join(f.root, 'docs'), { recursive: true });
+  writeFileSync(join(f.root, 'docs'), 'a file, not a folder');
+  reinit();
+  assert.ok(existsSync(template));
+  rmSync(template);
   reinit('--no-pr-template');
   assert.equal(existsSync(template), false);
   const result = spawnSync(process.execPath, [f.cli, 'shape'], {

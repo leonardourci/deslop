@@ -3,6 +3,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -47,8 +48,9 @@ function hasPrTemplate({ root }: { root: string }) {
     const directory = join(root, folder);
     return (
       existsSync(directory) &&
+      statSync(directory).isDirectory() &&
       readdirSync(directory).some((name) =>
-        /^pull_request_template(\.md)?$/i.test(name),
+        /^pull_request_template(\..+)?$/i.test(name),
       )
     );
   });
