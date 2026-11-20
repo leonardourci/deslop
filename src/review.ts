@@ -60,6 +60,25 @@ function environment({ env }: { env: NodeJS.ProcessEnv }) {
       delete clean[key];
   return clean;
 }
+function restrictTryCommands({
+  env,
+  tryDir
+}: {
+  env: NodeJS.ProcessEnv;
+  tryDir: string;
+}) {
+  for (const key of ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'])
+    delete env[key];
+  const index = Number(env.GIT_CONFIG_COUNT) || 0;
+  Object.assign(env, {
+    DESLOP_TRY_DIR: tryDir,
+    TMPDIR: tryDir,
+    GH_CONFIG_DIR: tryDir,
+    GIT_CONFIG_COUNT: String(index + 1),
+    [`GIT_CONFIG_KEY_${index}`]: 'protocol.allow',
+    [`GIT_CONFIG_VALUE_${index}`]: 'never',
+  });
+}
 export function intentSection({ intent }: { intent?: string }) {
   return intent
     ? `Intent supplied with this review (what the author asked for, including intentional slop; apply the selected instructions to it):\n${intent}\n`
@@ -89,6 +108,7 @@ export async function review({
   settings,
   prompt,
   findingsFile,
+  tryDir,
   session,
   model,
   effort,
@@ -110,6 +130,7 @@ export async function review({
   settings: Settings;
   prompt: string;
   findingsFile: string;
+  tryDir?: string;
   session?: Session;
   model?: string;
   effort?: string;
@@ -148,6 +169,11 @@ export async function review({
       clean.DESLOP_REVIEWER_MODEL = choice.model || '';
       clean.DESLOP_REVIEWER_EFFORT = choice.effort || '';
       clean.DESLOP_FINDINGS_FILE = findingsFile;
+      if (tryDir)
+        restrictTryCommands({
+          env: clean,
+          tryDir,
+        });
       if (provider === 'codex') {
         const args = ['exec'];
         if (sessionId) args.push('resume');
@@ -157,6 +183,7 @@ export async function review({
             common,
             scope,
             findingsFile,
+            tryDir,
           }),
         )
           .map(
@@ -175,11 +202,11 @@ export async function review({
           '-c',
           'permissions.deslop.extends=":workspace"',
           '-c',
-          'permissions.deslop.network.enabled=false',
+          `permissions.deslop.network.enabled=${Boolean(tryDir)}`,
           '-c',
           `permissions.deslop.filesystem={${filesystem}}`,
           '-c',
-          'features.shell_tool=false',
+          `features.shell_tool=${Boolean(tryDir)}`,
           '-c',
           'project_doc_max_bytes=0',
         );
@@ -223,6 +250,7 @@ export async function review({
           common,
           scope,
           findingsFile,
+          tryDir,
         });
         deny.push('Read(./.deslop/**)');
         const args = [
@@ -232,9 +260,9 @@ export async function review({
           '--mcp-config',
           '{"mcpServers":{}}',
           '--tools',
-          'Read,Glob,Grep,Edit,Write',
+          `Read,Glob,Grep,Edit,Write${tryDir ? ',Bash' : ''}`,
           '--allowedTools',
-          ['Read', 'Glob', 'Grep', ...allow].join(','),
+          ['Read', 'Glob', 'Grep', ...(tryDir ? ['Bash'] : []), ...allow].join(','),
           '--permission-mode',
           'dontAsk',
           '--settings',

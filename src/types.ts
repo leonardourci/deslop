@@ -6,6 +6,7 @@ export type Provider = {
   command: string[];
   resume?: string[];
 };
+export type TryMode = 'none' | 'code' | 'ui';
 export type Kind = {
   name: string;
   match: string[];
@@ -13,6 +14,7 @@ export type Kind = {
   checks: string[];
   instructions?: string[];
   ciRequired?: boolean;
+  try?: TryMode;
 };
 export type Config = {
   commands: Record<string, string>;
@@ -24,6 +26,7 @@ export type Config = {
   reviewers?: Record<string, Provider>;
   publishLocal?: boolean;
   fallbackLint?: boolean;
+  tryNotes?: string;
 };
 export type Settings = {
   reviewer?: string | string[];
@@ -103,6 +106,12 @@ export type RunData = {
   commits: string[];
   newFiles: string[];
   findings: string;
+  try?: {
+    mode: TryMode;
+    source: 'kind' | 'intent';
+    seconds: number;
+    unfixed?: string;
+  };
   workflowEdits?: string[];
   unstableCommands?: string[];
   remoteWarning?: string;

@@ -58,6 +58,32 @@ test('only tracked instruction files in the diff gain write access and git stays
   assert.ok(
     claude.deny.includes(`Write(/${join(f.root, '.agents/untracked.md')})`),
   );
+  assert.ok(claude.deny.includes('Bash'));
+  const tryDir = join(f.home, 'try-scratch');
+  const trying = claudeEdits({
+    cwd: f.root,
+    common: join(f.root, '.git'),
+    scope,
+    findingsFile,
+    tryDir,
+  });
+  assert.ok(trying.allow.includes(`Write(/${tryDir}/**)`));
+  assert.ok(trying.deny.includes('Bash(git:*)'));
+  assert.ok(!trying.deny.includes('Bash'));
+  assert.ok(trying.deny.includes(`Write(/${join(f.root, '.git')}/**)`));
+  assert.ok(trying.deny.includes('Bash(gh:*)'));
+  const tryFiles = codexFilesystem({
+    cwd: f.root,
+    common: join(f.root, '.git'),
+    scope,
+    findingsFile,
+    tryDir,
+  });
+  assert.equal(tryFiles[tryDir], 'write');
+  assert.equal(tryFiles[':tmpdir'], 'write');
+  assert.equal(tryFiles[join(f.root, '.agents/ignored.md')], undefined);
+  assert.equal(tryFiles[join(f.root, '.deslop')], 'deny');
+  assert.equal(tryFiles[join(f.root, '.git')], 'read');
 });
 
 test('excluded filenames are literal Claude read denies', async (t) => {

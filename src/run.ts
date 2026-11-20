@@ -2,10 +2,14 @@ import { randomUUID } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
+  realpathSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { git, DeslopError } from './process.ts';
 import { loadConfig, loadSettings, select, instructionsFor } from './config.ts';
@@ -24,7 +28,8 @@ import {
 } from './scope.ts';
 import { editorContract } from './editor-contract.ts';
 import { reviewedComments } from './comments.ts';
-import type { Config, Places, RunData, RunOptions, Session, Settings } from './types.ts';
+import { tryOverride, tryPlan, tryPrompt } from './try.ts';
+import type { Config, Places, RunData, RunOptions, Selection, Session, Settings } from './types.ts';
 
 async function cleanTree({ cwd }: { cwd: string }) {
   if ((await dirtyPaths({ cwd })).length)
@@ -80,6 +85,7 @@ async function agentEdits({
   paths,
   file,
   save,
+  tryDir,
 }: {
   places: Places;
   options: RunOptions;
@@ -90,11 +96,12 @@ async function agentEdits({
   session?: Session;
   data: RunData;
   dir: string;
-  turn: number;
+  turn: number | string;
   base: string;
   paths?: string[];
   file: string;
   save: () => void;
+  tryDir?: string;
 }) {
   const before = await gitState({ cwd: places.root });
   const scope = await reviewScope({
@@ -103,9 +110,13 @@ async function agentEdits({
     paths,
     config,
   });
-  const scopePrompt = `\nProject root: ${places.root}\nEditable tracked instruction files in this diff: ${JSON.stringify(scope.instructionFiles)}\nExisting untracked/ignored paths are excluded: ${JSON.stringify(scope.excluded)}\nNew normal source/test files are allowed; other instruction files and git metadata are not.\n`;
+  const projectRoot = `\nProject root: ${places.root}\n`;
+  const scopePrompt = tryDir
+    ? projectRoot
+    : `${projectRoot}Editable tracked instruction files in this diff: ${JSON.stringify(scope.instructionFiles)}\nExisting untracked/ignored paths are excluded: ${JSON.stringify(scope.excluded)}\nNew normal source/test files are allowed; other instruction files and git metadata are not.\n`;
   writeFileSync(file, data.findings);
-  const call = turn > 0 ? `check-fix ${turn}` : data.mode === 'clean' ? 'clean' : 'review';
+  const call =
+    typeof turn === 'string' ? turn : turn > 0 ? `check-fix ${turn}` : data.mode === 'clean' ? 'clean' : 'review';
   let result, failure;
   try {
     result = await review({
@@ -116,6 +127,7 @@ async function agentEdits({
       settings,
       prompt: prompt + scopePrompt,
       findingsFile: file,
+      tryDir,
       scope,
       session,
       model: options.reviewerModel,
@@ -153,6 +165,152 @@ async function agentEdits({
   ];
   return result.session;
 }
+function assertNoProofEdits({
+  edited,
+  cwd,
+  config,
+  label
+}: {
+  edited: string[];
+  cwd: string;
+  config: Config;
+  label: string;
+}) {
+  const protectedPaths = new Set(
+    [
+      'deslop.config.json',
+      ...Object.values(config.instructions || {}).filter(
+        (file) => typeof file === 'string',
+      ),
+    ].map((path) => resolve(cwd, path)),
+  );
+  if (
+    edited.some(
+      (path) =>
+        protectedPaths.has(resolve(cwd, path)) || instructionPath({ path }),
+    )
+  )
+    throw new DeslopError(
+      'PROOF_EDIT',
+      `${label} changed config or instructions; review those edits before rerunning`,
+    );
+}
+async function resumedSession({
+  session,
+  data,
+  cwd
+}: {
+  session: Session;
+  data: RunData;
+  cwd: string;
+}) {
+  return {
+    ...session,
+    commits: data.commits,
+    context: {
+      findings: data.findings,
+      paths: await dirtyCommitPaths({
+        cwd,
+        commits: data.commits,
+      }),
+    },
+  };
+}
+type AgentTurn = Omit<Parameters<typeof agentEdits>[0], 'prompt' | 'turn' | 'tryDir'>;
+async function tryChange({
+  turn,
+  intent,
+  override,
+  selection
+}: {
+  turn: AgentTurn;
+  intent?: string;
+  override: ReturnType<typeof tryOverride>;
+  selection: Selection;
+}) {
+  const plan = tryPlan({
+    override,
+    config: turn.config,
+    selection,
+  });
+  if (plan.mode === 'none') return { session: turn.session };
+  const { data } = turn;
+  const cwd = turn.places.root;
+  const tryDir = realpathSync(mkdtempSync(join(tmpdir(), 'deslop-try-')));
+  const unfixedFile = join(tryDir, 'unfixed.md');
+  const started = Date.now();
+  let session: Session | undefined;
+  let unfixed = '';
+  try {
+    session = await agentEdits({
+      ...turn,
+      turn: 'try',
+      tryDir,
+      prompt: `${intentSection({ intent })}\n${tryPrompt({
+        mode: plan.mode,
+        guidance: plan.guidance,
+        notes: turn.config.tryNotes,
+        scratch: tryDir,
+        unfixedFile,
+        findingsFile: turn.file,
+      })}`,
+    });
+    if (existsSync(unfixedFile)) unfixed = readFileSync(unfixedFile, 'utf8').trim();
+  } finally {
+    rmSync(tryDir, {
+      recursive: true,
+      force: true,
+    });
+    data.try = {
+      mode: plan.mode,
+      source: plan.source,
+      seconds: Math.round((Date.now() - started) / 1000),
+    };
+  }
+  if (unfixed) data.try.unfixed = unfixed;
+  assertNoProofEdits({
+    edited: await dirtyPaths({ cwd }),
+    cwd,
+    config: turn.config,
+    label: 'Try',
+  });
+  const created = await git({
+    cwd,
+    args: ['ls-files', '--others', '--exclude-standard'],
+  });
+  if (created)
+    throw new DeslopError(
+      'TRY_FILES',
+      `Try left new files in the repository; move scratch output outside it: ${created.split('\n').join(', ')}`,
+    );
+  const changed = await commitEdits({
+    cwd,
+    message: 'deslop: fix try findings',
+    data,
+  });
+  if (unfixed) {
+    const log = join(turn.dir, 'try.log');
+    const lines = unfixed.split('\n');
+    writeFileSync(log, `${unfixed}\n`);
+    data.checks.push({
+      name: 'try',
+      ok: false,
+      log,
+      failures: [
+        {
+          test: `try (${plan.mode})`,
+          message: lines[0],
+          excerpt: lines.slice(0, 20).join('\n'),
+        },
+      ],
+    });
+  }
+  return {
+    session,
+    changed,
+    failed: Boolean(unfixed),
+  };
+}
 export async function run({
   places,
   options
@@ -187,6 +345,7 @@ async function performRun({
     file: options.intent,
     prBody: info.pr?.body,
   });
+  const override = tryOverride({ intent });
   let config = await loadConfig({ places });
   const settings = loadSettings({ home: places.home });
   const choices = reviewerChoices({
@@ -345,6 +504,7 @@ async function performRun({
     });
     config = await loadConfig({ places });
     let fixes = 0,
+      tried = false,
       checkedHead,
       finalChecks,
       finalSelection,
@@ -489,6 +649,43 @@ async function performRun({
         await assertCheckState();
       }
       const completedHead = data.head;
+      if (checks.every((check) => check.ok) && !tried) {
+        tried = true;
+        const outcome = await tryChange({
+          turn: {
+            places,
+            options,
+            config,
+            settings,
+            choices,
+            session: await resumedSession({
+              session,
+              data,
+              cwd,
+            }),
+            data,
+            dir,
+            base: info.base,
+            paths: cleanPaths,
+            file,
+            save,
+          },
+          intent,
+          override,
+          selection: currentSelection,
+        });
+        session = outcome.session;
+        if (outcome.failed) {
+          data.head = await git({
+            cwd,
+            args: ['rev-parse', 'HEAD'],
+          });
+          await invalidateVerdict({ head: data.head });
+          data.verdict = 'failed';
+          return data;
+        }
+        if (outcome.changed) continue;
+      }
       if (checks.every((check) => check.ok)) {
         finalChecks = checks;
         finalSelection = currentSelection;
@@ -513,17 +710,11 @@ async function performRun({
         config,
         settings,
         choices,
-        session: {
-          ...session,
-          commits: data.commits,
-          context: {
-            findings: data.findings,
-            paths: await dirtyCommitPaths({
-              cwd,
-              commits: data.commits,
-            }),
-          },
-        },
+        session: await resumedSession({
+          session,
+          data,
+          cwd,
+        }),
         prompt: `${intentSection({ intent })}\n${editorContract({ findingsFile: file })}\nFix these failed checks from the same review. Instructions:\n${instructionsFor({
           root: cwd,
           config,
@@ -544,25 +735,12 @@ async function performRun({
         file,
         save,
       });
-      const edited = await dirtyPaths({ cwd });
-      const protectedPaths = new Set(
-        [
-          'deslop.config.json',
-          ...Object.values(config.instructions || {}).filter(
-            (file) => typeof file === 'string',
-          ),
-        ].map((path) => resolve(cwd, path)),
-      );
-      if (
-        edited.some(
-          (path) =>
-            protectedPaths.has(resolve(cwd, path)) || instructionPath({ path }),
-        )
-      )
-        throw new DeslopError(
-          'PROOF_EDIT',
-          'Check fix changed config or instructions; review those edits before rerunning',
-        );
+      assertNoProofEdits({
+        edited: await dirtyPaths({ cwd }),
+        cwd,
+        config,
+        label: 'Check fix',
+      });
       const changed = await commitEdits({
         cwd,
         message: 'deslop: fix failing checks',
@@ -669,6 +847,10 @@ function printSummary({
     );
   for (const check of data.checks)
     console.log(`check: ${check.name} ${check.ok ? 'pass' : 'fail'}`);
+  if (data.try)
+    console.log(
+      `try: ${data.try.mode} (${data.try.source}), ${data.try.seconds}s${data.try.unfixed ? `\nunfixed:\n${data.try.unfixed}` : ''}`,
+    );
   const findings = data.findings.trim();
   const lines = findings.split('\n').length;
   if (!findings) console.log('findings: none');
