@@ -76,17 +76,29 @@ test('kinds select unioned requirements and built-ins can be overridden per repo
       }),
     /unsupported/,
   );
-  for (const minutes of [0, -1, Infinity, NaN, 40000, '45']) {
-    assert.throws(() => validateConfig({
-      root: f.root,
-      config: {
-        ...config,
-        agentTimeoutMinutes: minutes
-      } as Config,
-    }), /agentTimeoutMinutes/);
+  const maximumTimerMinutes = 2_147_483_647 / 60_000;
+  for (const minutes of [0, -1, null, 2_147_483_648 / 60_000, '45']) {
+    const invalidConfig = JSON.parse(JSON.stringify({
+      ...config,
+      agentTimeoutMinutes: minutes,
+    }));
+    assert.throws(
+      () => validateConfig({
+        root: f.root,
+        config: invalidConfig,
+      }),
+      /agentTimeoutMinutes/,
+    );
     writeFileSync(join(f.home, 'settings.json'), JSON.stringify({ agentTimeoutMinutes: minutes }));
     assert.throws(() => loadSettings({ home: f.home }), /agentTimeoutMinutes/);
   }
+  assert.equal(validateConfig({
+    root: f.root,
+    config: {
+      ...config,
+      agentTimeoutMinutes: maximumTimerMinutes,
+    },
+  }).agentTimeoutMinutes, maximumTimerMinutes);
   assert.throws(
     () =>
       validateConfig({

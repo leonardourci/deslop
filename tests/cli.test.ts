@@ -507,25 +507,25 @@ test('providers deny git tools, retain sessions, detect hosted Codex and apply m
     {
       args: ['run'],
       minutes: 0.001,
-      call: 'review'
+      call: 'review',
     },
     {
       args: ['clean', 'work.txt'],
       machine: 0.002,
       minutes: 0.002,
-      call: 'clean'
+      call: 'clean',
     },
     {
       args: ['run', '--agent-timeout', '0.003'],
       machine: 0.002,
       minutes: 0.003,
-      call: 'review'
+      call: 'review',
     },
   ]) {
     writeFileSync(settingsFile, JSON.stringify({ agentTimeoutMinutes: scenario.machine }));
     const result = f.call(...scenario.args, '--reviewer', 'fixture');
     failed(result, 'AGENT_TIMEOUT');
-    const record = f.runs().at(-1);
+    const record = JSON.parse(readFileSync(result.stdout.match(/^details: (.+)$/m)[1], 'utf8'));
     assert.equal(record.verdict, 'failed');
     assert.equal(record.error.code, 'AGENT_TIMEOUT');
     assert.ok(record.error.message.includes(`${scenario.call} call (fixture) timed out after ${scenario.minutes} minutes`));
@@ -533,22 +533,33 @@ test('providers deny git tools, retain sessions, detect hosted Codex and apply m
     assert.ok(result.stdout.includes(record.error.message));
     assert.deepEqual(record.commits, []);
   }
-  for (const minutes of ['0', '-1', 'NaN', 'Infinity', '40000'])
-    failed(f.call('run', '--agent-timeout', minutes), 'CONFIG');
+  for (const minutes of ['0', '-1', 'NaN', 'Infinity', '40000']) {
+    const invalid = f.call('run', '--agent-timeout', minutes);
+    failed(invalid, 'CONFIG');
+    assert.match(invalid.stderr, /--agent-timeout must be a positive number/);
+  }
 
+  delete f.config.agentTimeoutMinutes;
   f.config.reviewers.fixture.command = [
-    'node', '-e',
-    "process.stdin.resume();process.stdin.on('end',()=>{if(require('node:fs').readFileSync('work.txt','utf8')==='bad')console.log(JSON.stringify({sessionId:'fix'}));else setInterval(()=>{},1000)})",
+    'node',
+    '-e',
+    `const fs = require('node:fs');
+const path = 'deslop.config.json';
+const config = JSON.parse(fs.readFileSync(path, 'utf8'));
+config.agentTimeoutMinutes = 0.001;
+fs.writeFileSync(path, JSON.stringify(config));
+console.log(JSON.stringify({ sessionId: 'fix' }));`,
   ];
   f.config.reviewers.fixture.resume = ['node', '-e', 'setInterval(() => {}, 1000)'];
   f.configure();
   writeFileSync(join(f.root, 'work.txt'), 'bad');
   f.commit();
-  writeFileSync(settingsFile, JSON.stringify({ agentTimeoutMinutes: 0.01 }));
+  writeFileSync(settingsFile, '{}');
   const fixTimeout = f.call('run', '--reviewer', 'fixture');
   failed(fixTimeout, 'AGENT_TIMEOUT');
-  assert.match(f.runs().at(-1).error.message, /check-fix 1 call \(fixture\) timed out after 0.01 minutes/);
-  assert.match(fixTimeout.stdout, /check-fix 1 call/);
+  const record = JSON.parse(readFileSync(fixTimeout.stdout.match(/^details: (.+)$/m)[1], 'utf8'));
+  assert.match(record.error.message, /check-fix 1 call \(fixture\) timed out after 0.001 minutes/);
+  assert.ok(fixTimeout.stdout.includes(record.error.message));
 });
 
 test('custom commands without resume get a fresh call explaining earlier commits', (t) => {

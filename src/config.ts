@@ -33,10 +33,20 @@ export function readJson({ path }: { path: string }) {
     fail(`Cannot read ${path}: ${error.message}`);
   }
 }
-export function validateAgentTimeout({ minutes }: { minutes?: number }) {
-  if (minutes !== undefined &&
-    (!Number.isFinite(minutes) || minutes <= 0 || minutes * 60_000 > 2_147_483_647))
-    fail('agentTimeoutMinutes must be a positive number of minutes, at most 2147483647 ms');
+export function agentTimeoutDelay({
+  minutes,
+  setting = 'agentTimeoutMinutes',
+}: {
+  minutes: unknown;
+  setting?: string;
+}) {
+  const maximumDelay = 2_147_483_647;
+  const requirement = `${setting} must be a positive number of minutes with a delay of at most ${maximumDelay} ms`;
+  if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0)
+    fail(requirement);
+  const delay = minutes * 60_000;
+  if (delay > maximumDelay) fail(requirement);
+  return Math.max(1, delay);
 }
 export function validateModels({ models = {} }: { models?: Record<string, ModelChoice> }) {
   if (!object(models)) fail('reviewerModels must be an object');
@@ -136,7 +146,8 @@ export function validateConfig({
     )
       fail(`Unknown instructions in ${kind.name}`);
   }
-  validateAgentTimeout({ minutes: config.agentTimeoutMinutes });
+  if (config.agentTimeoutMinutes !== undefined)
+    agentTimeoutDelay({ minutes: config.agentTimeoutMinutes });
   validateModels({ models: config.reviewerModels });
   if (config.reviewers !== undefined) {
     if (!object(config.reviewers))
@@ -283,7 +294,8 @@ export function loadSettings({ home }: { home: string }): Settings {
     !(strings(settings.reviewer) && settings.reviewer.length)
   )
     fail('reviewer must be a provider or nonempty list');
-  validateAgentTimeout({ minutes: settings.agentTimeoutMinutes });
+  if (settings.agentTimeoutMinutes !== undefined)
+    agentTimeoutDelay({ minutes: settings.agentTimeoutMinutes });
   validateModels({ models: settings.reviewerModels });
   return settings;
 }

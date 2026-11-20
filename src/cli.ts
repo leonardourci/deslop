@@ -14,7 +14,7 @@ import {
   locations,
   readJson,
   validateConfig,
-  validateAgentTimeout,
+  agentTimeoutDelay,
   loadConfig,
   loadSettings,
   select,
@@ -360,7 +360,10 @@ async function main({
         (options[key] ||= []).push(value);
       else if (name === 'agent-timeout') {
         options.agentTimeoutMinutes = Number(value);
-        validateAgentTimeout({ minutes: options.agentTimeoutMinutes });
+        agentTimeoutDelay({
+          minutes: options.agentTimeoutMinutes,
+          setting: '--agent-timeout',
+        });
       } else options[key] = value;
     } else
       throw new DeslopError('USAGE', `Unknown or incomplete option: ${flag}`);
@@ -380,7 +383,10 @@ async function main({
     );
     return;
   }
-  const runOptions = ['local', 'base', 'intent', 'reviewer', 'reviewerModel', 'reviewerEffort', 'agentTimeoutMinutes'];
+  const runOptions = [
+    'local', 'base', 'intent', 'reviewer', 'reviewerModel', 'reviewerEffort',
+    'agentTimeoutMinutes',
+  ];
   const allowed = {
     run: runOptions,
     clean: runOptions,

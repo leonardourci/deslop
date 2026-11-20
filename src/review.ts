@@ -4,6 +4,7 @@ import { dirtyPaths, gitState } from './git.ts';
 import { execute, DeslopError } from './process.ts';
 import { codexFilesystem, claudeEdits } from './scope.ts';
 import { editorContract } from './editor-contract.ts';
+import { agentTimeoutDelay } from './config.ts';
 import type { Config, Scope, Session, Settings } from './types.ts';
 
 export function runningAgent({ env = process.env }: { env?: NodeJS.ProcessEnv } = {}) {
@@ -117,8 +118,9 @@ export async function review({
   scope?: Scope;
   env?: NodeJS.ProcessEnv;
 }) {
-  const minutes = agentTimeoutMinutes ?? settings.agentTimeoutMinutes ?? config.agentTimeoutMinutes ?? 45;
-  const timeoutMs = minutes * 60_000;
+  const minutes =
+    agentTimeoutMinutes ?? settings.agentTimeoutMinutes ?? config.agentTimeoutMinutes ?? 45;
+  const timeoutMs = agentTimeoutDelay({ minutes });
   const providers = session ? [session.provider] : choices;
   const findingsBefore = existsSync(findingsFile) ? readFileSync(findingsFile, 'utf8') : '';
   const errors = [];
@@ -308,7 +310,10 @@ export async function review({
       };
     } catch (error) {
       if (error.code === 'AGENT_TIMEOUT')
-        error.message = `${call} call (${provider}) timed out after ${minutes} minutes. Raise --agent-timeout <minutes> or agentTimeoutMinutes in ~/.deslop/settings.json or deslop.config.json.`;
+        throw new DeslopError(
+          'AGENT_TIMEOUT',
+          `${call} call (${provider}) timed out after ${minutes} minutes. Raise --agent-timeout <minutes> or agentTimeoutMinutes in ~/.deslop/settings.json or deslop.config.json.`,
+        );
       if (
         session ||
         !['ENOENT', 'COMMAND', 'REVIEW_UNAVAILABLE'].includes(error.code)
