@@ -23,7 +23,7 @@ test('Claude honors the agent timeout and reports AGENT_TIMEOUT', async (t) => {
       prompt: '',
       findingsFile: join(f.home, 'findings.txt'),
       env: f.env,
-      timeoutMs: 100,
+      agentTimeoutMinutes: 0.001,
     }),
     { code: 'AGENT_TIMEOUT' },
   );
@@ -208,7 +208,7 @@ test('a hung reviewer ends with AGENT_TIMEOUT', async (t) => {
       settings: {},
       prompt: '',
       findingsFile: join(cwd, 'findings.txt'),
-      timeoutMs: 100,
+      agentTimeoutMinutes: 0.001,
     }),
     { code: 'AGENT_TIMEOUT' },
   );

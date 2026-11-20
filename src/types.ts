@@ -20,6 +20,7 @@ export type Config = {
   instructions?: Record<string, string | false>;
   checkFixAttempts?: number;
   reviewerModels?: Record<string, ModelChoice>;
+  agentTimeoutMinutes?: number;
   reviewers?: Record<string, Provider>;
   publishLocal?: boolean;
   fallbackLint?: boolean;
@@ -27,6 +28,7 @@ export type Config = {
 export type Settings = {
   reviewer?: string | string[];
   reviewerModels?: Record<string, ModelChoice>;
+  agentTimeoutMinutes?: number;
 };
 export type Selection = {
   kinds: string[];
@@ -67,6 +69,7 @@ export type RunOptions = {
   reviewer?: string;
   reviewerModel?: string;
   reviewerEffort?: string;
+  agentTimeoutMinutes?: number;
 };
 export type Failure = {
   test: string;

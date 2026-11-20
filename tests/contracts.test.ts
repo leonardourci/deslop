@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { select, validateConfig, instructionsFor } from '../src/config.ts';
+import { select, validateConfig, instructionsFor, loadSettings } from '../src/config.ts';
 import { checkStates } from '../src/github.ts';
 import { reviewerChoices, modelChoice, runningAgent } from '../src/review.ts';
 import { fixture } from './fixtures.ts';
@@ -76,6 +76,17 @@ test('kinds select unioned requirements and built-ins can be overridden per repo
       }),
     /unsupported/,
   );
+  for (const minutes of [0, -1, Infinity, NaN, 40000, '45']) {
+    assert.throws(() => validateConfig({
+      root: f.root,
+      config: {
+        ...config,
+        agentTimeoutMinutes: minutes
+      } as Config,
+    }), /agentTimeoutMinutes/);
+    writeFileSync(join(f.home, 'settings.json'), JSON.stringify({ agentTimeoutMinutes: minutes }));
+    assert.throws(() => loadSettings({ home: f.home }), /agentTimeoutMinutes/);
+  }
   assert.throws(
     () =>
       validateConfig({

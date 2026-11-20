@@ -14,6 +14,7 @@ import {
   locations,
   readJson,
   validateConfig,
+  validateAgentTimeout,
   loadConfig,
   loadSettings,
   select,
@@ -338,6 +339,7 @@ async function main({
     'reviewer',
     'reviewer-model',
     'reviewer-effort',
+    'agent-timeout',
     'config',
     'command',
     'check',
@@ -356,7 +358,10 @@ async function main({
       const value = args.shift();
       if (['command', 'check'].includes(name))
         (options[key] ||= []).push(value);
-      else options[key] = value;
+      else if (name === 'agent-timeout') {
+        options.agentTimeoutMinutes = Number(value);
+        validateAgentTimeout({ minutes: options.agentTimeoutMinutes });
+      } else options[key] = value;
     } else
       throw new DeslopError('USAGE', `Unknown or incomplete option: ${flag}`);
   }
@@ -371,11 +376,11 @@ async function main({
   if (command === 'help') options.help = true;
   if (options.help) {
     console.log(
-      'deslop [run] [--local] [--base ref] [--intent file] [--reviewer provider] [--reviewer-model name] [--reviewer-effort effort]\ndeslop clean <path>... [run options]\ndeslop init [--config file | --command name=command --check name] [--no-pr-template]\ndeslop status [--publish]\ndeslop skill copy <name>\ndeslop shape',
+      'deslop [run] [--local] [--base ref] [--intent file] [--reviewer provider] [--reviewer-model name] [--reviewer-effort effort] [--agent-timeout minutes]\ndeslop clean <path>... [run options]\ndeslop init [--config file | --command name=command --check name] [--no-pr-template]\ndeslop status [--publish]\ndeslop skill copy <name>\ndeslop shape',
     );
     return;
   }
-  const runOptions = ['local', 'base', 'intent', 'reviewer', 'reviewerModel', 'reviewerEffort'];
+  const runOptions = ['local', 'base', 'intent', 'reviewer', 'reviewerModel', 'reviewerEffort', 'agentTimeoutMinutes'];
   const allowed = {
     run: runOptions,
     clean: runOptions,

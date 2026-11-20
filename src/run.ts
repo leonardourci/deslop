@@ -119,6 +119,8 @@ async function agentEdits({
       session,
       model: options.reviewerModel,
       effort: options.reviewerEffort,
+      agentTimeoutMinutes: options.agentTimeoutMinutes,
+      call: turn === 0 ? data.mode === 'clean' ? 'clean' : 'review' : `check-fix ${turn}`,
     });
   } catch (error) {
     failure = error;
@@ -654,6 +656,7 @@ function printSummary({
 }) {
   if (data.remoteWarning) console.log(data.remoteWarning);
   console.log(`verdict: ${data.verdict}`);
+  if (data.error) console.log(`error: ${data.error.code}: ${data.error.message}`);
   if (data.verdict === 'passed')
     console.log(
       `proof: ${data.published ? 'git note and GitHub status' : 'local git note'}\nstatus: ${data.published ? 'published' : data.statusReason || 'not published yet; run deslop status --publish after pushing or when GitHub recovers'}`,

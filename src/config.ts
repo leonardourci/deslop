@@ -33,6 +33,11 @@ export function readJson({ path }: { path: string }) {
     fail(`Cannot read ${path}: ${error.message}`);
   }
 }
+export function validateAgentTimeout({ minutes }: { minutes?: number }) {
+  if (minutes !== undefined &&
+    (!Number.isFinite(minutes) || minutes <= 0 || minutes * 60_000 > 2_147_483_647))
+    fail('agentTimeoutMinutes must be a positive number of minutes, at most 2147483647 ms');
+}
 export function validateModels({ models = {} }: { models?: Record<string, ModelChoice> }) {
   if (!object(models)) fail('reviewerModels must be an object');
   for (const [provider, choice] of Object.entries(models)) {
@@ -59,6 +64,7 @@ export function validateConfig({
     'instructions',
     'checkFixAttempts',
     'reviewerModels',
+    'agentTimeoutMinutes',
     'reviewers',
     'publishLocal',
     'fallbackLint',
@@ -130,6 +136,7 @@ export function validateConfig({
     )
       fail(`Unknown instructions in ${kind.name}`);
   }
+  validateAgentTimeout({ minutes: config.agentTimeoutMinutes });
   validateModels({ models: config.reviewerModels });
   if (config.reviewers !== undefined) {
     if (!object(config.reviewers))
@@ -266,7 +273,7 @@ export function loadSettings({ home }: { home: string }): Settings {
   if (
     !object(settings) ||
     Object.keys(settings).some(
-      (key) => !['reviewer', 'reviewerModels'].includes(key),
+      (key) => !['reviewer', 'reviewerModels', 'agentTimeoutMinutes'].includes(key),
     )
   )
     fail('Unsupported machine settings');
@@ -276,6 +283,7 @@ export function loadSettings({ home }: { home: string }): Settings {
     !(strings(settings.reviewer) && settings.reviewer.length)
   )
     fail('reviewer must be a provider or nonempty list');
+  validateAgentTimeout({ minutes: settings.agentTimeoutMinutes });
   validateModels({ models: settings.reviewerModels });
   return settings;
 }

@@ -91,7 +91,8 @@ export async function review({
   session,
   model,
   effort,
-  timeoutMs = AGENT_TIMEOUT_MS,
+  agentTimeoutMinutes,
+  call = session ? 'check-fix' : 'review',
   scope = {
     instructionFiles: [],
     protectedInstructions: [],
@@ -104,17 +105,20 @@ export async function review({
   cwd: string;
   common: string;
   choices: string[];
-  config: Pick<Config, 'reviewers' | 'reviewerModels'>;
+  config: Pick<Config, 'reviewers' | 'reviewerModels' | 'agentTimeoutMinutes'>;
   settings: Settings;
   prompt: string;
   findingsFile: string;
   session?: Session;
   model?: string;
   effort?: string;
-  timeoutMs?: number;
+  agentTimeoutMinutes?: number;
+  call?: string;
   scope?: Scope;
   env?: NodeJS.ProcessEnv;
 }) {
+  const minutes = agentTimeoutMinutes ?? settings.agentTimeoutMinutes ?? config.agentTimeoutMinutes ?? 45;
+  const timeoutMs = minutes * 60_000;
   const providers = session ? [session.provider] : choices;
   const findingsBefore = existsSync(findingsFile) ? readFileSync(findingsFile, 'utf8') : '';
   const errors = [];
@@ -303,6 +307,8 @@ export async function review({
         },
       };
     } catch (error) {
+      if (error.code === 'AGENT_TIMEOUT')
+        error.message = `${call} call (${provider}) timed out after ${minutes} minutes. Raise --agent-timeout <minutes> or agentTimeoutMinutes in ~/.deslop/settings.json or deslop.config.json.`;
       if (
         session ||
         !['ENOENT', 'COMMAND', 'REVIEW_UNAVAILABLE'].includes(error.code)
@@ -315,7 +321,6 @@ export async function review({
   throw new DeslopError('REVIEW_UNAVAILABLE', errors.join('\n'));
 }
 
-const AGENT_TIMEOUT_MS = 15 * 60 * 1000;
 function reportedSession({ output }: { output: string }) {
   const last = output.trim().split('\n').at(-1) ?? '';
   if (!last.startsWith('{')) return undefined;

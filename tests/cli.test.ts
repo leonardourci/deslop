@@ -497,6 +497,58 @@ test('providers deny git tools, retain sessions, detect hosted Codex and apply m
     ),
   );
   assert.ok(deny.includes('Read(./.deslop/**)'));
+
+  f.config.reviewers.fixture.command = ['node', '-e', 'setInterval(() => {}, 1000)'];
+  f.config.agentTimeoutMinutes = 0.001;
+  f.configure();
+  f.commit();
+  const settingsFile = join(f.home, '.deslop', 'settings.json');
+  for (const scenario of [
+    {
+      args: ['run'],
+      minutes: 0.001,
+      call: 'review'
+    },
+    {
+      args: ['clean', 'work.txt'],
+      machine: 0.002,
+      minutes: 0.002,
+      call: 'clean'
+    },
+    {
+      args: ['run', '--agent-timeout', '0.003'],
+      machine: 0.002,
+      minutes: 0.003,
+      call: 'review'
+    },
+  ]) {
+    writeFileSync(settingsFile, JSON.stringify({ agentTimeoutMinutes: scenario.machine }));
+    const result = f.call(...scenario.args, '--reviewer', 'fixture');
+    failed(result, 'AGENT_TIMEOUT');
+    const record = f.runs().at(-1);
+    assert.equal(record.verdict, 'failed');
+    assert.equal(record.error.code, 'AGENT_TIMEOUT');
+    assert.ok(record.error.message.includes(`${scenario.call} call (fixture) timed out after ${scenario.minutes} minutes`));
+    assert.match(record.error.message, /Raise --agent-timeout <minutes> or agentTimeoutMinutes/);
+    assert.ok(result.stdout.includes(record.error.message));
+    assert.deepEqual(record.commits, []);
+  }
+  for (const minutes of ['0', '-1', 'NaN', 'Infinity', '40000'])
+    failed(f.call('run', '--agent-timeout', minutes), 'CONFIG');
+
+  f.config.reviewers.fixture.command = [
+    'node', '-e',
+    "process.stdin.resume();process.stdin.on('end',()=>{if(require('node:fs').readFileSync('work.txt','utf8')==='bad')console.log(JSON.stringify({sessionId:'fix'}));else setInterval(()=>{},1000)})",
+  ];
+  f.config.reviewers.fixture.resume = ['node', '-e', 'setInterval(() => {}, 1000)'];
+  f.configure();
+  writeFileSync(join(f.root, 'work.txt'), 'bad');
+  f.commit();
+  writeFileSync(settingsFile, JSON.stringify({ agentTimeoutMinutes: 0.01 }));
+  const fixTimeout = f.call('run', '--reviewer', 'fixture');
+  failed(fixTimeout, 'AGENT_TIMEOUT');
+  assert.match(f.runs().at(-1).error.message, /check-fix 1 call \(fixture\) timed out after 0.01 minutes/);
+  assert.match(fixTimeout.stdout, /check-fix 1 call/);
 });
 
 test('custom commands without resume get a fresh call explaining earlier commits', (t) => {
