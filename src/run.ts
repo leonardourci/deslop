@@ -23,6 +23,7 @@ import {
   regularFile,
 } from './scope.ts';
 import { editorContract } from './editor-contract.ts';
+import { reviewedComments } from './comments.ts';
 import type { Config, Places, RunData, RunOptions, Session, Settings } from './types.ts';
 
 async function cleanTree({ cwd }: { cwd: string }) {
@@ -308,6 +309,12 @@ async function performRun({
       choices,
       prompt: reviewPrompt({
         intent,
+        comments: await reviewedComments({
+          cwd,
+          paths: initialPaths,
+          base: cleanPaths ? undefined : info.base,
+          head: initialHead,
+        }),
         target,
         findingsFile: file,
         instructions: instructionsFor({
