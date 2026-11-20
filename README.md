@@ -51,7 +51,7 @@ Only failing, errored or timed-out checks resume the same Codex or Claude sessio
 
 ## Trying the change
 
-Bugs are slop too, so deslop can also have the agent try the change once the checks pass. It is off by default. A kind's `try` is `none`, `code` or `ui`:
+Once the checks pass, deslop can also have the agent try the change to find bugs the checks missed. It is off by default. A kind's `try` is `none`, `code` or `ui`:
 
 - `code`: the agent exercises the changed logic directly. It calls the function, runs the CLI or hits the API with real cases.
 - `ui`: the same, plus it starts the app and drives the changed screens in a headless browser of its choosing, then stops what it started.

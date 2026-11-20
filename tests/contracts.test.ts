@@ -421,6 +421,10 @@ test('a How to try this section overrides the highest kind try mode and carries 
       guidance: 'Only the logic.',
     });
   assert.equal(plan('## How to try this\n#### Steps\nType é\n## Next', ['docs']).guidance, '#### Steps\nType é');
+  assert.equal(
+    plan('## How to try this\nTry: code\n```sh\n# start the app\nnode app.cjs\n```\nThen search.\n## Next', ['docs']).guidance,
+    '```sh\n# start the app\nnode app.cjs\n```\nThen search.',
+  );
   assert.throws(() => tryOverride({ intent: '## How to try this\nTry: open settings' }), /use Try: none, code or ui/);
 });
 

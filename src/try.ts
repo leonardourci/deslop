@@ -4,13 +4,19 @@ import type { Config, Selection, TryMode } from './types.ts';
 export const TRY_MODES: TryMode[] = ['none', 'code', 'ui'];
 
 export function tryOverride({ intent }: { intent?: string }) {
-  const heading = intent?.match(/^(#{1,6})\s+how to try this\s*#*\s*$/im);
-  if (!heading) return {};
-  const rest = intent.slice(heading.index + heading[0].length);
-  const end = rest.search(new RegExp(`^(#{1,${heading[1].length}}\\s|<details)`, 'm'));
-  const text = (end < 0 ? rest : rest.slice(0, end))
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .trim();
+  const lines = (intent ?? '').replace(/<!--[\s\S]*?-->/g, '').split('\n');
+  const start = lines.findIndex((line) => /^#{1,6}\s+how to try this\s*#*\s*$/i.test(line));
+  if (start < 0) return {};
+  const level = lines[start].match(/^#+/)[0].length;
+  const sectionEnd = new RegExp(`^(#{1,${level}}\\s|<details)`);
+  const section: string[] = [];
+  let fenced = false;
+  for (const line of lines.slice(start + 1)) {
+    if (!fenced && sectionEnd.test(line)) break;
+    if (/^\s*(`{3,}|~{3,})/.test(line)) fenced = !fenced;
+    section.push(line);
+  }
+  const text = section.join('\n').trim();
   const [first, ...others] = text.split('\n');
   const line = first.replace(/[*_`]/g, '').match(/^\s*(?:-\s+)?try:\s*(.*?)\s*$/i);
   const mode = line?.[1].toLowerCase() as TryMode | undefined;
@@ -68,8 +74,8 @@ export function tryPrompt({
     `The checks pass. Now try the change yourself to find bugs the checks missed. Try mode: ${mode}.`,
     mode === 'ui' ? `${exercise} ${screen}` : exercise,
     'You may run commands in this turn, but never run git or gh, commit, stage, push or change branches, and never edit deslop.config.json or instruction files. Deslop commits your fixes and reruns the checks.',
-    `Fix bugs by editing existing repository files only. Keep every scratch file (scripts, inputs, screenshots, logs, browser profiles) in ${scratch}, outside the repository; deslop deletes that folder after this turn and ends the run red if the turn leaves new files in the repository.`,
-    `Fix every bug you find in the repository. Add what you tried and what you found to the end of ${findingsFile}, keeping what it already holds.`,
+    `Fix every bug you find by editing existing repository files only. Keep every scratch file (scripts, inputs, screenshots, logs, browser profiles) in ${scratch}, outside the repository; deslop deletes that folder after this turn and ends the run red if the turn leaves new files in the repository.`,
+    `Add what you tried and what you found to the end of ${findingsFile}, keeping what it already holds.`,
     `If something still fails and you could not fix it, describe it in ${unfixedFile}. Leave that file absent when everything you tried works.`,
     notes ? `How to run this repository (tryNotes from deslop.config.json):\n${notes}` : '',
     guidance

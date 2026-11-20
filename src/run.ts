@@ -110,7 +110,10 @@ async function agentEdits({
     paths,
     config,
   });
-  const scopePrompt = `\nProject root: ${places.root}\nEditable tracked instruction files in this diff: ${JSON.stringify(scope.instructionFiles)}\nExisting untracked/ignored paths are excluded: ${JSON.stringify(scope.excluded)}\nNew normal source/test files are allowed; other instruction files and git metadata are not.\n`;
+  const projectRoot = `\nProject root: ${places.root}\n`;
+  const scopePrompt = tryDir
+    ? projectRoot
+    : `${projectRoot}Editable tracked instruction files in this diff: ${JSON.stringify(scope.instructionFiles)}\nExisting untracked/ignored paths are excluded: ${JSON.stringify(scope.excluded)}\nNew normal source/test files are allowed; other instruction files and git metadata are not.\n`;
   writeFileSync(file, data.findings);
   const call =
     typeof turn === 'string' ? turn : turn > 0 ? `check-fix ${turn}` : data.mode === 'clean' ? 'clean' : 'review';
