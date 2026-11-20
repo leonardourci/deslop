@@ -508,18 +508,21 @@ test('providers deny git tools, retain sessions, detect hosted Codex and apply m
       args: ['run'],
       minutes: 0.001,
       call: 'review',
+      setting: 'agentTimeoutMinutes in deslop.config.json',
     },
     {
       args: ['clean', 'work.txt'],
       machine: 0.002,
       minutes: 0.002,
       call: 'clean',
+      setting: 'agentTimeoutMinutes in ~/.deslop/settings.json',
     },
     {
       args: ['run', '--agent-timeout', '0.003'],
       machine: 0.002,
       minutes: 0.003,
       call: 'review',
+      setting: '--agent-timeout <minutes>',
     },
   ]) {
     writeFileSync(settingsFile, JSON.stringify({ agentTimeoutMinutes: scenario.machine }));
@@ -529,7 +532,7 @@ test('providers deny git tools, retain sessions, detect hosted Codex and apply m
     assert.equal(record.verdict, 'failed');
     assert.equal(record.error.code, 'AGENT_TIMEOUT');
     assert.ok(record.error.message.includes(`${scenario.call} call (fixture) timed out after ${scenario.minutes} minutes`));
-    assert.match(record.error.message, /Raise --agent-timeout <minutes> or agentTimeoutMinutes/);
+    assert.ok(record.error.message.endsWith(`Raise ${scenario.setting}.`));
     assert.ok(result.stdout.includes(record.error.message));
     assert.deepEqual(record.commits, []);
   }

@@ -129,11 +129,15 @@ async function agentEdits({
   data.findings = existsSync(file) ? readFileSync(file, 'utf8') : '';
   save();
   if (result) writeFileSync(join(dir, `agent-${turn}.log`), result.output);
-  if ((await gitState({ cwd: places.root })) !== before)
+  if ((await gitState({ cwd: places.root })) !== before) {
+    const message = 'Agent changed git state; deslop refuses to commit, push or mark this run';
+    if (failure?.code === 'AGENT_TIMEOUT')
+      throw new DeslopError('AGENT_TIMEOUT', `${failure.message} ${message}`);
     throw new DeslopError(
       'AGENT_GIT',
-      'Agent changed git state; deslop refuses to commit, push or mark this run',
+      message,
     );
+  }
   if (failure) throw failure;
   if (turn === 0)
     await assertInstructionScope({

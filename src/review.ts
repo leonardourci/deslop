@@ -309,11 +309,19 @@ export async function review({
         },
       };
     } catch (error) {
-      if (error.code === 'AGENT_TIMEOUT')
+      if (error.code === 'AGENT_TIMEOUT') {
+        let timeoutSetting = '--agent-timeout <minutes>';
+        if (agentTimeoutMinutes === undefined) {
+          if (settings.agentTimeoutMinutes !== undefined)
+            timeoutSetting = 'agentTimeoutMinutes in ~/.deslop/settings.json';
+          else if (config.agentTimeoutMinutes !== undefined)
+            timeoutSetting = 'agentTimeoutMinutes in deslop.config.json';
+        }
         throw new DeslopError(
           'AGENT_TIMEOUT',
-          `${call} call (${provider}) timed out after ${minutes} minutes. Raise --agent-timeout <minutes> or agentTimeoutMinutes in ~/.deslop/settings.json or deslop.config.json.`,
+          `${call} call (${provider}) timed out after ${minutes} minutes. Raise ${timeoutSetting}.`,
         );
+      }
       if (
         session ||
         !['ENOENT', 'COMMAND', 'REVIEW_UNAVAILABLE'].includes(error.code)
