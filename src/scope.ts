@@ -148,12 +148,12 @@ export function codexFilesystem({
   cwd,
   common,
   scope,
-  findings
+  findingsFile
 }: {
   cwd: string;
   common: string;
   scope: Scope;
-  findings: string;
+  findingsFile: string;
 }) {
   const rules: Record<string, string> = {
     ':tmpdir': 'read',
@@ -167,19 +167,19 @@ export function codexFilesystem({
   for (const path of scope.instructionFiles)
     rules[resolve(cwd, path)] = 'write';
   for (const path of scope.excluded) rules[resolve(cwd, path)] = 'deny';
-  rules[findings] = 'write';
+  rules[findingsFile] = 'write';
   return rules;
 }
 export function claudeEdits({
   cwd,
   common,
   scope,
-  findings
+  findingsFile
 }: {
   cwd: string;
   common: string;
   scope: Scope;
-  findings: string;
+  findingsFile: string;
 }) {
   const absolute = (path: string) => '/' + resolve(cwd, path);
   const literalPath = (path: string) => absolute(path).replace(/[\\*?[\]]/g, '\\$&');
@@ -187,7 +187,7 @@ export function claudeEdits({
     `Edit(${absolute('*')})`,
     ...scope.normalDirectories.map((path) => `Edit(${absolute(path)}/**)`),
     ...scope.instructionFiles.map((path) => `Edit(${absolute(path)})`),
-    `Edit(${literalPath(findings)})`,
+    `Edit(${literalPath(findingsFile)})`,
   ];
   allow.push(...allow.map((rule) => rule.replace(/^Edit\(/, 'Write(')));
   const denied = new Set([

@@ -68,14 +68,14 @@ export function reviewPrompt({
   intent,
   instructions,
   target,
-  findings
+  findingsFile
 }: {
   intent?: string;
   instructions: string;
   target: string;
-  findings: string;
+  findingsFile: string;
 }) {
-  return `${intentSection({ intent })}\n${editorContract({ findings })}\nFollow only the selected review instructions. No check results are supplied to this first review. Instructions:\n${instructions}\n\n${target}`;
+  return `${intentSection({ intent })}\n${editorContract({ findingsFile })}\nFollow only the selected review instructions. No check results are supplied to this first review. Instructions:\n${instructions}\n\n${target}`;
 }
 export async function review({
   cwd,
@@ -84,7 +84,7 @@ export async function review({
   config,
   settings,
   prompt,
-  findings,
+  findingsFile,
   session,
   model,
   effort,
@@ -104,7 +104,7 @@ export async function review({
   config: Pick<Config, 'reviewers' | 'reviewerModels'>;
   settings: Settings;
   prompt: string;
-  findings: string;
+  findingsFile: string;
   session?: Session;
   model?: string;
   effort?: string;
@@ -113,8 +113,10 @@ export async function review({
   env?: NodeJS.ProcessEnv;
 }) {
   const providers = session ? [session.provider] : choices;
+  const findingsBefore = existsSync(findingsFile) ? readFileSync(findingsFile, 'utf8') : '';
   const errors = [];
   for (const provider of providers) {
+    if (errors.length) writeFileSync(findingsFile, findingsBefore);
     const choice =
       session?.choice ||
       modelChoice({
@@ -126,7 +128,6 @@ export async function review({
       });
     let output,
       sessionId = session?.id;
-    const findingsBefore = existsSync(findings) ? readFileSync(findings, 'utf8') : '';
     let before;
     try {
       before = await providerState({ cwd });
@@ -137,7 +138,7 @@ export async function review({
       const clean = environment({ env });
       clean.DESLOP_REVIEWER_MODEL = choice.model || '';
       clean.DESLOP_REVIEWER_EFFORT = choice.effort || '';
-      clean.DESLOP_FINDINGS_FILE = findings;
+      clean.DESLOP_FINDINGS_FILE = findingsFile;
       if (provider === 'codex') {
         const args = ['exec'];
         if (sessionId) args.push('resume');
@@ -146,7 +147,7 @@ export async function review({
             cwd,
             common,
             scope,
-            findings,
+            findingsFile,
           }),
         )
           .map(
@@ -212,7 +213,7 @@ export async function review({
           cwd,
           common,
           scope,
-          findings,
+          findingsFile,
         });
         deny.push('Read(./.deslop/**)');
         const args = [
@@ -305,7 +306,6 @@ export async function review({
       )
         throw error;
       if (!before || before !== (await providerState({ cwd }))) throw error;
-      writeFileSync(findings, findingsBefore);
       errors.push(`${provider}: ${error.message}`);
     }
   }
@@ -315,7 +315,12 @@ export async function review({
 const AGENT_TIMEOUT_MS = 15 * 60 * 1000;
 function reportedSession({ output }: { output: string }) {
   const last = output.trim().split('\n').at(-1) ?? '';
-  return last.startsWith('{') ? JSON.parse(last).sessionId : undefined;
+  if (!last.startsWith('{')) return undefined;
+  try {
+    return JSON.parse(last).sessionId;
+  } catch {
+    return undefined;
+  }
 }
 async function providerState({ cwd }: { cwd: string }) {
   if ((await dirtyPaths({ cwd })).length) return null;

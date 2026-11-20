@@ -113,7 +113,7 @@ async function agentEdits({
       config,
       settings,
       prompt: prompt + scopePrompt,
-      findings: file,
+      findingsFile: file,
       scope,
       session,
       model: options.reviewerModel,
@@ -309,7 +309,7 @@ async function performRun({
       prompt: reviewPrompt({
         intent,
         target,
-        findings: file,
+        findingsFile: file,
         instructions: instructionsFor({
           root: cwd,
           config,
@@ -510,7 +510,7 @@ async function performRun({
             }),
           },
         },
-        prompt: `${intentSection({ intent })}\n${editorContract({ findings: file })}\nFix these failed checks from the same review. Instructions:\n${instructionsFor({
+        prompt: `${intentSection({ intent })}\n${editorContract({ findingsFile: file })}\nFix these failed checks from the same review. Instructions:\n${instructionsFor({
           root: cwd,
           config,
           selection: currentSelection
@@ -821,7 +821,7 @@ async function invalidate({
       head,
       branch,
       state: 'failure',
-      description: 'Review or checks failed',
+      description: 'Checks failed',
     });
   } catch (error) {
     if (!['COMMAND', 'COMMAND_TIMEOUT', 'ENOENT'].includes(error.code))
