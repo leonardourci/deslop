@@ -12,7 +12,7 @@ export function tryOverride({ intent }: { intent?: string }) {
     .replace(/<!--[\s\S]*?-->/g, '')
     .trim();
   const [first, ...others] = text.split('\n');
-  const line = first.match(/^try:\s*(.*?)\s*$/i);
+  const line = first.replace(/[*_`]/g, '').match(/^\s*(?:-\s+)?try:\s*(.*?)\s*$/i);
   const mode = line?.[1].toLowerCase() as TryMode | undefined;
   if (line && !TRY_MODES.includes(mode))
     throw new DeslopError(
@@ -61,14 +61,14 @@ export function tryPrompt({
   findingsFile: string;
 }) {
   const exercise =
-    'Exercise the changed behavior directly with real cases: call the changed functions, run the CLI or hit the API, including the edge cases the change touches. Try only what changed.';
+    'Exercise the changed behavior directly with real cases: call the changed functions, run the CLI or hit the API, including edge cases. Try only what the change touches.';
   const screen =
     'Then start the app yourself, using the notes and guidance below, and drive the changed screens in a headless browser of your choice. Stop every process you started before you finish.';
   return [
     `The checks pass. Now try the change yourself to find bugs the checks missed. Try mode: ${mode}.`,
     mode === 'ui' ? `${exercise} ${screen}` : exercise,
-    'You may run commands in this turn, but never run git, commit, stage, push or change branches, and never edit deslop.config.json or instruction files. Deslop commits your fixes as `deslop: fix try findings` and reruns the checks.',
-    `Keep every scratch file (scripts, inputs, screenshots, logs) in ${scratch}, outside the repository; deslop deletes that folder after this turn.`,
+    'You may run commands in this turn, but never run git or gh, commit, stage, push or change branches, and never edit deslop.config.json or instruction files. Deslop commits your fixes and reruns the checks.',
+    `Fix bugs by editing existing repository files only. Keep every scratch file (scripts, inputs, screenshots, logs, browser profiles) in ${scratch}, outside the repository; deslop deletes that folder after this turn and ends the run red if the turn leaves new files in the repository.`,
     `Fix every bug you find in the repository. Add what you tried and what you found to the end of ${findingsFile}, keeping what it already holds.`,
     `If something still fails and you could not fix it, describe it in ${unfixedFile}. Leave that file absent when everything you tried works.`,
     notes ? `How to run this repository (tryNotes from deslop.config.json):\n${notes}` : '',

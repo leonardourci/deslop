@@ -5,6 +5,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { select, validateConfig, instructionsFor, loadSettings } from '../src/config.ts';
 import { checkStates } from '../src/github.ts';
+import { tryOverride, tryPlan } from '../src/try.ts';
 import { reviewerChoices, modelChoice, runningAgent } from '../src/review.ts';
 import { fixture } from './fixtures.ts';
 import type { Config } from '../src/types.ts';
@@ -356,6 +357,71 @@ test('publication policy only accepts booleans, CI-required kinds need checks an
       }),
     /try must be none, code or ui/,
   );
+  for (const tryNotes of ['', 5])
+    assert.throws(
+      () =>
+        validateConfig({
+          root: f.root,
+          config: {
+            ...f.config,
+            tryNotes,
+          } as unknown as Config,
+        }),
+      /tryNotes must be a nonempty string/,
+    );
+});
+
+test('a How to try this section overrides the highest kind try mode and carries its guidance', () => {
+  const config = {
+    commands: {},
+    kinds: [
+      {
+        name: 'docs',
+        match: ['**/*.md'],
+        commands: [],
+        checks: []
+      },
+      {
+        name: 'logic',
+        match: ['src/**'],
+        commands: [],
+        checks: [],
+        try: 'code'
+      },
+      {
+        name: 'web',
+        match: ['web/**'],
+        commands: [],
+        checks: [],
+        try: 'ui'
+      },
+    ],
+  } as Config;
+  const plan = (intent: string | undefined, kinds: string[]) =>
+    tryPlan({
+      override: tryOverride({ intent }),
+      config,
+      selection: { kinds },
+    });
+  assert.deepEqual(plan(undefined, ['docs']), {
+    mode: 'none',
+    source: 'kind',
+    guidance: undefined,
+  });
+  assert.equal(plan('Asked: search.', ['docs', 'logic', 'web']).mode, 'ui');
+  assert.deepEqual(plan('### How To Try This\nSearch for "é".\n### Notes\nlater', ['logic']), {
+    mode: 'code',
+    source: 'kind',
+    guidance: 'Search for "é".',
+  });
+  for (const line of ['Try: none', '**Try:** none', '- Try: `none`', 'try: NONE'])
+    assert.deepEqual(plan(`## How to try this\n${line}\nOnly the logic.\n# Other\nx`, ['web']), {
+      mode: 'none',
+      source: 'intent',
+      guidance: 'Only the logic.',
+    });
+  assert.equal(plan('## How to try this\n#### Steps\nType é\n## Next', ['docs']).guidance, '#### Steps\nType é');
+  assert.throws(() => tryOverride({ intent: '## How to try this\nTry: open settings' }), /use Try: none, code or ui/);
 });
 
 
