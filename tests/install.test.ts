@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const installer = fileURLToPath(new URL('../docs/install.sh', import.meta.url));
 const latestApi = 'https://api.github.com/repos/leonardourci/deslop/releases/latest';
-const latestTag = 'v0.1.0-0123456789abcdef0123456789abcdef01234567';
+const latestTag = 'v0.1.2';
 
 for (const scenario of [
   {
@@ -17,6 +17,11 @@ for (const scenario of [
   },
   {
     name: 'pinned',
+    tag: 'v0.1.1',
+    status: 0,
+  },
+  {
+    name: 'a legacy commit pin',
     tag: 'v0.1.0-abcdef0123456789abcdef0123456789abcdef01',
     status: 0,
   },
