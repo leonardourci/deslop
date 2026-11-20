@@ -15,13 +15,14 @@ Apache-2.0 licensed.
 
 ## Pinned or always latest
 
-Each passing push to `main` publishes `deslop.tgz` under a tag `v<package version>-<full commit SHA>`.
-Published assets and tags are never replaced by the workflow. Pick a tag from [Releases](https://github.com/leonardourci/deslop/releases) to pin an install.
+Each passing push to `main` publishes `deslop.tgz` under the next patch tag (`v0.1.1`, `v0.1.2`, ...).
+The packed package uses that version, so `deslop --version` matches the release. Releases queue in one workflow concurrency group, without canceling older pushes. The workflow finds the highest existing `vX.Y.Z` tag and bumps its patch number; with none, it bumps the version in `package.json`. It tags the pushed commit without committing version changes back to `main`.
+Published assets and tags are never replaced by the workflow. Legacy `v0.1.0-<full commit SHA>` releases remain installable. Pick a tag from [Releases](https://github.com/leonardourci/deslop/releases) to pin an install.
 
 - Global latest: rerun the installer above to update. It resolves the latest tag through the public GitHub API, downloads that tag's tarball to a temporary folder, installs the local tarball and removes the download. It needs no `gh` login and works on npm 11 and 12 without enabling remote or git dependencies.
-- Global pinned: replace `<tag>` with a release tag in `curl -fsSL https://raw.githubusercontent.com/leonardourci/deslop/main/docs/install.sh | sh -s -- '<tag>'`.
-- Pinned dev dependency: `npm install --save-dev --allow-remote=root 'https://github.com/leonardourci/deslop/releases/download/<tag>/deslop.tgz'`, then run `npx deslop`. With pnpm: `pnpm add --save-dev 'https://github.com/leonardourci/deslop/releases/download/<tag>/deslop.tgz'`, then run `pnpm exec deslop`.
-- Direct global pinned install: `npm install -g --allow-remote=root 'https://github.com/leonardourci/deslop/releases/download/<tag>/deslop.tgz'`.
+- Global pinned: `curl -fsSL https://raw.githubusercontent.com/leonardourci/deslop/main/docs/install.sh | sh -s -- v0.1.1`.
+- Pinned dev dependency: `npm install --save-dev --allow-remote=root 'https://github.com/leonardourci/deslop/releases/download/v0.1.1/deslop.tgz'`, then run `npx deslop`. With pnpm: `pnpm add --save-dev 'https://github.com/leonardourci/deslop/releases/download/v0.1.1/deslop.tgz'`, then run `pnpm exec deslop`.
+- Direct global pinned install: `npm install -g --allow-remote=root 'https://github.com/leonardourci/deslop/releases/download/v0.1.1/deslop.tgz'`.
 
 To always use the latest release, run the installer before each use, then run `deslop`. The installer avoids GitHub's latest-download redirect, which can serve an older release after publication. A pinned URL and the repository's lockfile keep a dev dependency on that release until you change it.
 
@@ -123,6 +124,8 @@ Local checks run in order on the evolving tree. After each command, deslop commi
 ## Developing deslop
 
 Run `npm ci`, `npm run lint`, `npm run typecheck` and `npm test`. `npm run lint:fix` applies safe layout fixes. Source and tests are TypeScript that Node runs directly, so they use only erasable syntax and `.ts` import paths. The installed command and the fallback lint worker start from JavaScript entries in `bin/` that load the TypeScript through jiti (see [the spec](docs/spec.md#lint-and-type-checking)). The configured deslop commands and CI run lint, type checking and tests on Node 22.18 and 24.
+
+`node --test tests/release.test.ts` runs the workflow's publish script against a temporary bare Git repository. It verifies consecutive versions, numeric tag ordering and prerelease exclusion, then installs the `v0.1.1` pin and checks `deslop --version`. GitHub and curl use local stand-ins. npm resolves package dependencies through the registry using a temporary cache.
 
 Contributor reviews follow [the repository skill](.agents/skills/review/SKILL.md) and the three
 shipped skills. CodeRabbit is an on-demand challenger requested by Hydra; automatic reviews are off.

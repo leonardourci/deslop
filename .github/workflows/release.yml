@@ -4,6 +4,10 @@ on:
     branches: [main]
 permissions:
   contents: read
+concurrency:
+  group: release
+  queue: max
+  cancel-in-progress: false
 jobs:
   tests:
     name: Release tests (${{ matrix.node }})
@@ -33,6 +37,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -42,18 +47,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          version=$(node -p 'JSON.parse(require("fs").readFileSync("package.json", "utf8")).version')
-          tag="v${version}-${GITHUB_SHA}"
+          version=$(node --input-type=module -e '
+            import { execFileSync } from "node:child_process";
+            import { readFileSync } from "node:fs";
+            const latest = execFileSync("git", ["tag", "--list", "--sort=-v:refname"], { encoding: "utf8" })
+              .split("\n").find((tag) => /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(tag));
+            const base = latest ? latest.slice(1) : JSON.parse(readFileSync("package.json", "utf8")).version;
+            const [major, minor, patch] = base.split(/[-+]/, 1)[0].split(".");
+            console.log([major, minor, BigInt(patch) + 1n].join("."));
+          ')
+          tag="v${version}"
+          npm version "$version" --allow-same-version --no-git-tag-version --ignore-scripts
           npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP"
           mv "$RUNNER_TEMP/deslop-${version}.tgz" "$RUNNER_TEMP/deslop.tgz"
-          if ! gh api --method POST "repos/$GH_REPO/git/refs" \
-            -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" --silent; then
-            tag_commit=$(gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq '.object.sha')
-            if [ "$tag_commit" != "$GITHUB_SHA" ]; then
-              echo "Tag $tag does not point to $GITHUB_SHA" >&2
-              exit 1
-            fi
-          fi
+          gh api --method POST "repos/$GH_REPO/git/refs" \
+            -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" --silent
           gh release create "$tag" "$RUNNER_TEMP/deslop.tgz" \
             --verify-tag --title "$tag" \
             --notes "Installable package for commit ${GITHUB_SHA}." --latest

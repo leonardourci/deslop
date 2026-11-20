@@ -2,7 +2,7 @@
 set -eu
 
 if [ "$#" -gt 1 ]; then
-  echo 'Usage: install.sh [release-tag]' >&2
+  echo 'Usage: install.sh [release-tag, e.g. v0.1.1]' >&2
   exit 2
 fi
 
