@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fixture } from './fixtures.ts';
@@ -18,10 +18,15 @@ test('the release workflow publishes consecutive versions and the installer pins
   const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8' }).trim();
   git('clone', '--bare', '--no-local', '--no-tags', '--single-branch', checkout, remote);
   git('-C', checkout, 'remote', 'add', 'origin', remote);
-  const head = git('-C', checkout, 'rev-parse', 'HEAD');
-  const parent = git('-C', checkout, 'rev-parse', 'HEAD^');
-  const legacy = `v0.1.0-${head}`;
-  git('--git-dir', remote, 'update-ref', `refs/tags/${legacy}`, head);
+  const startingCommit = git('-C', checkout, 'rev-parse', 'HEAD');
+  const legacy = `v0.1.0-${startingCommit}`;
+  git('--git-dir', remote, 'update-ref', `refs/tags/${legacy}`, startingCommit);
+  const packagePaths = ['bin', 'src', 'docs', 'eslint', 'skills', 'README.md', 'package.json', 'package-lock.json'];
+  for (const path of packagePaths) {
+    cpSync(join(project, path), join(checkout, path), { recursive: true });
+  }
+  git('-C', checkout, 'add', '--', ...packagePaths);
+  git('-C', checkout, 'commit', '-m', 'Add package to release fixture');
   const workflow = readFileSync(join(project, '.github/workflows/release.yml'), 'utf8');
   const script = workflow.split('        run: |\n')[1].replace(/^ {10}/gm, '');
   writeFileSync(join(bin, 'gh'), `#!/usr/bin/env node
@@ -63,41 +68,48 @@ copyFileSync(join(process.env.RELEASE_TEST_ROOT, 'releases/v0.1.1/deslop.tgz'), 
     RUNNER_TEMP: root,
     npm_config_prefix: join(root, 'installed'),
     npm_config_ignore_scripts: 'true',
-    npm_config_offline: 'true',
+    npm_config_cache: join(root, 'npm-cache'),
+    npm_config_userconfig: join(root, 'npmrc'),
     npm_config_audit: 'false',
   };
-  for (const [sha, version] of [[parent, '0.1.1'], [head, '0.1.2'], [head, '2.0.11']]) {
+  for (const version of ['0.1.1', '0.1.2', '2.0.11']) {
+    if (version !== '0.1.1') {
+      git('-C', checkout, 'restore', 'package.json', 'package-lock.json');
+      if (version === '2.0.11') {
+        execFileSync('npm', ['version', version, '--no-git-tag-version', '--ignore-scripts'], {
+          cwd: checkout,
+          env,
+        });
+        git('-C', checkout, 'add', '--', 'package.json', 'package-lock.json');
+      }
+      git('-C', checkout, 'commit', '--allow-empty', '-m', `Push for v${version}`);
+    }
+    const sha = git('-C', checkout, 'rev-parse', 'HEAD');
     if (version === '2.0.11') {
       for (const tag of ['v1.99.99', 'v2.0.9', 'v2.0.10', 'v9.0.0-rc.1', 'v99.0.0-build']) {
-        git('--git-dir', remote, 'update-ref', `refs/tags/${tag}`, head);
+        git('--git-dir', remote, 'update-ref', `refs/tags/${tag}`, startingCommit);
       }
     }
-    git('-C', checkout, 'reset', '--hard', sha);
     git('-C', checkout, 'push', 'origin', 'HEAD:refs/heads/proof');
     git('-C', checkout, 'fetch', '--tags', 'origin');
-    for (const path of ['bin', 'src', 'docs', 'eslint', 'skills']) {
-      cpSync(join(project, path), join(checkout, path), { recursive: true });
-    }
-    copyFileSync(join(project, 'README.md'), join(checkout, 'README.md'));
-    copyFileSync(join(project, 'package.json'), join(checkout, 'package.json'));
-    copyFileSync(join(project, 'package-lock.json'), join(checkout, 'package-lock.json'));
     const released = spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
       cwd: checkout,
       env: {
         ...env,
-        GITHUB_SHA: sha
+        GITHUB_SHA: sha,
       },
       encoding: 'utf8',
     });
     assert.equal(released.status, 0, released.stdout + released.stderr);
     assert.equal(git('--git-dir', remote, 'rev-parse', `refs/tags/v${version}`), sha);
     assert.equal(git('-C', checkout, 'rev-parse', 'HEAD'), sha);
+    assert.equal(git('--git-dir', remote, 'rev-parse', 'refs/heads/proof'), sha);
     const archive = join(releases, `v${version}`, 'deslop.tgz');
     const metadata = JSON.parse(execFileSync('tar', ['-xOf', archive, 'package/package.json'], { encoding: 'utf8' }));
     assert.equal(metadata.version, version);
     t.diagnostic(`push ${sha}: v${version}; packed version ${metadata.version}; HEAD unchanged`);
   }
-  assert.equal(git('--git-dir', remote, 'rev-parse', `refs/tags/${legacy}`), head);
+  assert.equal(git('--git-dir', remote, 'rev-parse', `refs/tags/${legacy}`), startingCommit);
   const installed = spawnSync('sh', [join(project, 'docs/install.sh'), 'v0.1.1'], {
     env,
     encoding: 'utf8',

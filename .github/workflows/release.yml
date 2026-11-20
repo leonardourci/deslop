@@ -53,11 +53,11 @@ jobs:
             const latest = execFileSync("git", ["tag", "--list", "--sort=-v:refname"], { encoding: "utf8" })
               .split("\n").find((tag) => /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(tag));
             const base = latest ? latest.slice(1) : JSON.parse(readFileSync("package.json", "utf8")).version;
-            const [major, minor, patch] = base.split(".");
+            const [major, minor, patch] = base.split(/[-+]/, 1)[0].split(".");
             console.log([major, minor, BigInt(patch) + 1n].join("."));
           ')
           tag="v${version}"
-          npm version "$version" --no-git-tag-version --ignore-scripts
+          npm version "$version" --allow-same-version --no-git-tag-version --ignore-scripts
           npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP"
           mv "$RUNNER_TEMP/deslop-${version}.tgz" "$RUNNER_TEMP/deslop.tgz"
           gh api --method POST "repos/$GH_REPO/git/refs" \

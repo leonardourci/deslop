@@ -125,7 +125,7 @@ Local checks run in order on the evolving tree. After each command, deslop commi
 
 Run `npm ci`, `npm run lint`, `npm run typecheck` and `npm test`. `npm run lint:fix` applies safe layout fixes. Source and tests are TypeScript that Node runs directly, so they use only erasable syntax and `.ts` import paths. The installed command and the fallback lint worker start from JavaScript entries in `bin/` that load the TypeScript through jiti (see [the spec](docs/spec.md#lint-and-type-checking)). The configured deslop commands and CI run lint, type checking and tests on Node 22.18 and 24.
 
-`node --test tests/release.test.ts` runs the workflow's publish script against a temporary bare Git repository. It pushes consecutive commits, checks `v0.1.1` and `v0.1.2`, checks numeric tag ordering and prerelease exclusion, and installs the `v0.1.1` archive through the installer with real npm. GitHub tag/release calls and curl downloads use local stand-ins; no GitHub releases change. The install uses npm's offline cache populated by `npm ci`.
+`node --test tests/release.test.ts` runs the workflow's publish script against a temporary bare Git repository. It verifies consecutive versions, numeric tag ordering and prerelease exclusion, then installs the `v0.1.1` pin and checks `deslop --version`. GitHub and curl use local stand-ins. npm resolves package dependencies through the registry using a temporary cache.
 
 Contributor reviews follow [the repository skill](.agents/skills/review/SKILL.md) and the three
 shipped skills. CodeRabbit is an on-demand challenger requested by Hydra; automatic reviews are off.
