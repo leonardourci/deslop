@@ -52,6 +52,10 @@ const PR_SECTIONS = [
     body: '## How it was checked\n'
   },
   {
+    name: 'How to try this',
+    body: '## How to try this\n\n<!-- Optional. A first line Try: none, code or ui overrides the default for this PR. Then say what to exercise and with which inputs. -->\n',
+  },
+  {
     name: 'Intentional slop',
     body: '<details>\n<summary>Intentional slop</summary>\n\n<!-- One item per line: file, what is kept, and why. -->\n\n</details>\n',
   },

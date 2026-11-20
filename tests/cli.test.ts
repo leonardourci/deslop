@@ -836,7 +836,7 @@ test('init creates repo config without a workflow and shape works outside a repo
   const template = join(f.root, '.github', 'pull_request_template.md');
   assert.deepEqual(
     readFileSync(template, 'utf8').match(/^## .+/gm),
-    ['## What was asked', '## What changed', '## How it was checked'],
+    ['## What was asked', '## What changed', '## How it was checked', '## How to try this'],
   );
   assert.match(readFileSync(template, 'utf8'), /<details>\n<summary>Intentional slop<\/summary>/);
   failed(f.call('init'), 'CONFIG');
@@ -858,6 +858,7 @@ test('init creates repo config without a workflow and shape works outside a repo
   assert.equal(merged.match(/## What changed/g).length, 1);
   assert.match(merged, /## What was asked/);
   assert.match(merged, /## How it was checked/);
+  assert.match(merged, /## How to try this/);
   assert.match(merged, /<summary>Intentional slop<\/summary>/);
   reinit();
   assert.equal(readFileSync(existing, 'utf8'), merged);
