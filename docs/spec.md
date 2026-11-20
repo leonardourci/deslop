@@ -2,6 +2,8 @@
 
 The supported environment is macOS and Linux with github.com.
 
+Every passing push to `main` publishes a GitHub release with `deslop.tgz`. Release workflows queue serially. The version is one patch above the highest existing stable `vX.Y.Z` tag, ignoring legacy commit-suffixed tags; without a stable tag, the starting version comes from `package.json`. The first stable release is `v0.1.1`. The workflow updates the packed package's version, tags the pushed commit and never commits back to `main` or replaces a tag or asset. The installer accepts stable version pins and legacy commit pins. Existing releases stay available.
+
 Deslop works on commits, without requiring a push or pull request. A dirty checkout stops with one line: `commit or stash your changes first`. It refuses the default branch. There is one flow, with fixing as its only behavior.
 
 1. A fresh non-interactive agent reviews the branch diff without check results, fixes every finding and writes all of its findings as plain text into the run's review file. Only deslop can stage, commit, push or write markers. The agent's tools deny git operations; deslop also rejects unexpected git-state changes. Edits become `deslop: fix review findings` commits as the configured user, with no attribution footer.
