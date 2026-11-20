@@ -89,6 +89,7 @@ export async function review({
   settings,
   prompt,
   findingsFile,
+  tryDir,
   session,
   model,
   effort,
@@ -110,6 +111,7 @@ export async function review({
   settings: Settings;
   prompt: string;
   findingsFile: string;
+  tryDir?: string;
   session?: Session;
   model?: string;
   effort?: string;
@@ -148,6 +150,7 @@ export async function review({
       clean.DESLOP_REVIEWER_MODEL = choice.model || '';
       clean.DESLOP_REVIEWER_EFFORT = choice.effort || '';
       clean.DESLOP_FINDINGS_FILE = findingsFile;
+      if (tryDir) clean.DESLOP_TRY_DIR = tryDir;
       if (provider === 'codex') {
         const args = ['exec'];
         if (sessionId) args.push('resume');
@@ -157,6 +160,7 @@ export async function review({
             common,
             scope,
             findingsFile,
+            tryDir,
           }),
         )
           .map(
@@ -175,11 +179,11 @@ export async function review({
           '-c',
           'permissions.deslop.extends=":workspace"',
           '-c',
-          'permissions.deslop.network.enabled=false',
+          `permissions.deslop.network.enabled=${Boolean(tryDir)}`,
           '-c',
           `permissions.deslop.filesystem={${filesystem}}`,
           '-c',
-          'features.shell_tool=false',
+          `features.shell_tool=${Boolean(tryDir)}`,
           '-c',
           'project_doc_max_bytes=0',
         );
@@ -223,6 +227,7 @@ export async function review({
           common,
           scope,
           findingsFile,
+          tryDir,
         });
         deny.push('Read(./.deslop/**)');
         const args = [
@@ -232,9 +237,9 @@ export async function review({
           '--mcp-config',
           '{"mcpServers":{}}',
           '--tools',
-          'Read,Glob,Grep,Edit,Write',
+          `Read,Glob,Grep,Edit,Write${tryDir ? ',Bash' : ''}`,
           '--allowedTools',
-          ['Read', 'Glob', 'Grep', ...allow].join(','),
+          ['Read', 'Glob', 'Grep', ...(tryDir ? ['Bash'] : []), ...allow].join(','),
           '--permission-mode',
           'dontAsk',
           '--settings',

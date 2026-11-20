@@ -58,6 +58,29 @@ test('only tracked instruction files in the diff gain write access and git stays
   assert.ok(
     claude.deny.includes(`Write(/${join(f.root, '.agents/untracked.md')})`),
   );
+  assert.ok(claude.deny.includes('Bash'));
+  const tryDir = join(f.home, 'try-scratch');
+  const trying = claudeEdits({
+    cwd: f.root,
+    common: join(f.root, '.git'),
+    scope,
+    findingsFile,
+    tryDir,
+  });
+  assert.ok(trying.allow.includes(`Write(/${tryDir}/**)`));
+  assert.ok(trying.deny.includes('Bash(git:*)'));
+  assert.ok(!trying.deny.includes('Bash'));
+  assert.ok(trying.deny.includes(`Write(/${join(f.root, '.git')}/**)`));
+  assert.equal(
+    codexFilesystem({
+      cwd: f.root,
+      common: join(f.root, '.git'),
+      scope,
+      findingsFile,
+      tryDir,
+    })[tryDir],
+    'write',
+  );
 });
 
 test('excluded filenames are literal Claude read denies', async (t) => {

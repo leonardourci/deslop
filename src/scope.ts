@@ -148,12 +148,14 @@ export function codexFilesystem({
   cwd,
   common,
   scope,
-  findingsFile
+  findingsFile,
+  tryDir
 }: {
   cwd: string;
   common: string;
   scope: Scope;
   findingsFile: string;
+  tryDir?: string;
 }) {
   const rules: Record<string, string> = {
     ':tmpdir': 'read',
@@ -168,18 +170,21 @@ export function codexFilesystem({
     rules[resolve(cwd, path)] = 'write';
   for (const path of scope.excluded) rules[resolve(cwd, path)] = 'deny';
   rules[findingsFile] = 'write';
+  if (tryDir) rules[tryDir] = 'write';
   return rules;
 }
 export function claudeEdits({
   cwd,
   common,
   scope,
-  findingsFile
+  findingsFile,
+  tryDir
 }: {
   cwd: string;
   common: string;
   scope: Scope;
   findingsFile: string;
+  tryDir?: string;
 }) {
   const absolute = (path: string) => '/' + resolve(cwd, path);
   const literalPath = (path: string) => absolute(path).replace(/[\\*?[\]]/g, '\\$&');
@@ -188,6 +193,7 @@ export function claudeEdits({
     ...scope.normalDirectories.map((path) => `Edit(${absolute(path)}/**)`),
     ...scope.instructionFiles.map((path) => `Edit(${absolute(path)})`),
     `Edit(${literalPath(findingsFile)})`,
+    ...(tryDir ? [`Edit(${literalPath(tryDir)}/**)`] : []),
   ];
   allow.push(...allow.map((rule) => rule.replace(/^Edit\(/, 'Write(')));
   const denied = new Set([
@@ -199,7 +205,7 @@ export function claudeEdits({
       (path) => !scope.instructionFiles.includes(path),
     ),
   ]);
-  const deny = ['Bash', 'Agent'];
+  const deny = [tryDir ? 'Bash(git:*)' : 'Bash', 'Agent'];
   for (const path of denied)
     deny.push(
       `Edit(${literalPath(path)})`,
