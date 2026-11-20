@@ -157,9 +157,10 @@ export function codexFilesystem({
   findingsFile: string;
   tryDir?: string;
 }) {
+  const temporary = tryDir ? 'write' : 'read';
   const rules: Record<string, string> = {
-    ':tmpdir': 'read',
-    ':slash_tmp': 'read',
+    ':tmpdir': temporary,
+    ':slash_tmp': temporary,
     [join(cwd, '.git')]: 'read',
     [common]: 'read',
   };
@@ -168,7 +169,8 @@ export function codexFilesystem({
     rules[resolve(cwd, file)] = 'read';
   for (const path of scope.instructionFiles)
     rules[resolve(cwd, path)] = 'write';
-  for (const path of scope.excluded) rules[resolve(cwd, path)] = 'deny';
+  const hidden = tryDir ? ['.deslop'] : scope.excluded;
+  for (const path of hidden) rules[resolve(cwd, path)] = 'deny';
   rules[findingsFile] = 'write';
   if (tryDir) rules[tryDir] = 'write';
   return rules;
@@ -205,7 +207,7 @@ export function claudeEdits({
       (path) => !scope.instructionFiles.includes(path),
     ),
   ]);
-  const deny = [tryDir ? 'Bash(git:*)' : 'Bash', 'Agent'];
+  const deny = [...(tryDir ? ['Bash(git:*)', 'Bash(gh:*)'] : ['Bash']), 'Agent'];
   for (const path of denied)
     deny.push(
       `Edit(${literalPath(path)})`,

@@ -60,6 +60,25 @@ function environment({ env }: { env: NodeJS.ProcessEnv }) {
       delete clean[key];
   return clean;
 }
+function tryEnvironment({
+  env,
+  tryDir
+}: {
+  env: NodeJS.ProcessEnv;
+  tryDir: string;
+}) {
+  for (const key of ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'])
+    delete env[key];
+  const index = Number(env.GIT_CONFIG_COUNT) || 0;
+  return {
+    DESLOP_TRY_DIR: tryDir,
+    TMPDIR: tryDir,
+    GH_CONFIG_DIR: tryDir,
+    GIT_CONFIG_COUNT: String(index + 1),
+    [`GIT_CONFIG_KEY_${index}`]: 'protocol.allow',
+    [`GIT_CONFIG_VALUE_${index}`]: 'never',
+  };
+}
 export function intentSection({ intent }: { intent?: string }) {
   return intent
     ? `Intent supplied with this review (what the author asked for, including intentional slop; apply the selected instructions to it):\n${intent}\n`
@@ -150,7 +169,10 @@ export async function review({
       clean.DESLOP_REVIEWER_MODEL = choice.model || '';
       clean.DESLOP_REVIEWER_EFFORT = choice.effort || '';
       clean.DESLOP_FINDINGS_FILE = findingsFile;
-      if (tryDir) clean.DESLOP_TRY_DIR = tryDir;
+      if (tryDir) Object.assign(clean, tryEnvironment({
+        env: clean,
+        tryDir
+      }));
       if (provider === 'codex') {
         const args = ['exec'];
         if (sessionId) args.push('resume');
