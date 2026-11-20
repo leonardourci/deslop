@@ -64,16 +64,16 @@ function prTemplates({ root }: { root: string }) {
       if (entry.isSymbolicLink())
         throw new DeslopError('CONFIG', `Cannot merge a symlinked PR template: ${path}`);
       if (entry.isFile()) templates.push(path);
-      else if (entry.isDirectory()) collect(path, true);
+      else if (entry.isDirectory() && !nested) collect(path, true);
     }
   }
   for (const folder of ['', '.github', 'docs']) {
     const directory = join(root, folder);
-    if (existsSync(directory) && lstatSync(directory).isSymbolicLink())
+    if (lstatSync(directory, { throwIfNoEntry: false })?.isSymbolicLink())
       throw new DeslopError('CONFIG', `Cannot merge PR templates through a symlink: ${directory}`);
     if (existsSync(directory) && statSync(directory).isDirectory()) collect(directory);
   }
-  return templates;
+  return templates.length ? templates : [join(root, '.github', 'pull_request_template.md')];
 }
 function mergePrSections(text: string) {
   const sections = new Set([
@@ -176,20 +176,17 @@ async function init({
     config,
     root: places.root,
   });
+  const templates = options.noPrTemplate ? [] : prTemplates({ root: places.root });
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, `${JSON.stringify(config, null, 2)}\n`, { flag: 'wx' });
   console.log(`wrote: ${target}`);
-  if (!options.noPrTemplate) {
-    const templates = prTemplates({ root: places.root });
-    if (!templates.length) templates.push(join(places.root, '.github', 'pull_request_template.md'));
-    for (const template of templates) {
-      const before = existsSync(template) ? readFileSync(template, 'utf8') : '';
-      const after = mergePrSections(before);
-      if (after === before) continue;
-      mkdirSync(dirname(template), { recursive: true });
-      writeFileSync(template, after);
-      console.log(`wrote: ${template}`);
-    }
+  for (const template of templates) {
+    const before = existsSync(template) ? readFileSync(template, 'utf8') : '';
+    const after = mergePrSections(before);
+    if (after === before) continue;
+    mkdirSync(dirname(template), { recursive: true });
+    writeFileSync(template, after);
+    console.log(`wrote: ${template}`);
   }
   console.log(
     'next: configure commands and kinds, then commit before running deslop',

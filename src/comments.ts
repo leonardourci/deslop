@@ -4,26 +4,50 @@ import ts from 'typescript';
 import { git } from './process.ts';
 import { regularFile } from './scope.ts';
 
-const commentPrefixes: Record<string, RegExp> = {
-  '.py': /^\s*#/,
-  '.rb': /^\s*#/,
-  '.sh': /^\s*#/,
-  '.bash': /^\s*#/,
-  '.zsh': /^\s*#/,
-  '.yml': /^\s*#/,
-  '.yaml': /^\s*#/,
-  '.toml': /^\s*#/,
-  '.r': /^\s*#/,
-  '.sql': /^\s*--/,
-  '.lua': /^\s*--/,
-  '.html': /^\s*<!--/,
-  '.xml': /^\s*<!--/,
-  '.css': /^\s*(\/\*|\*(?!\/))/,
-  '.scss': /^\s*(\/\/|\/\*|\*(?!\/))/,
+type CommentSyntax = {
+  prefix: RegExp;
+  opensBlock?: RegExp;
+  closesBlock?: RegExp;
 };
-const slashComment = /^\s*(\/\/|\/\*|\*(?!\/))/;
+type CommentLine = {
+  line: number;
+  text: string;
+};
+const hashComments = { prefix: /^\s*#/ };
+const dashComments = { prefix: /^\s*--/ };
+const markupComments = {
+  prefix: /^\s*<!--/,
+  opensBlock: /^\s*<!--(?!.*-->)/,
+  closesBlock: /-->/,
+};
+const blockComments = {
+  prefix: /^\s*\/\*/,
+  opensBlock: /^\s*\/\*(?!.*\*\/)/,
+  closesBlock: /\*\//,
+};
+const slashComments = {
+  ...blockComments,
+  prefix: /^\s*(\/\/|\/\*)/,
+};
+const commentSyntax: Record<string, CommentSyntax> = {
+  '.py': hashComments,
+  '.rb': hashComments,
+  '.sh': hashComments,
+  '.bash': hashComments,
+  '.zsh': hashComments,
+  '.yml': hashComments,
+  '.yaml': hashComments,
+  '.toml': hashComments,
+  '.r': hashComments,
+  '.sql': dashComments,
+  '.lua': dashComments,
+  '.html': markupComments,
+  '.xml': markupComments,
+  '.css': blockComments,
+  '.scss': slashComments,
+};
 for (const extension of ['.c', '.h', '.cpp', '.hpp', '.cs', '.java', '.go', '.rs', '.swift', '.kt', '.kts', '.dart', '.php'])
-  commentPrefixes[extension] = slashComment;
+  commentSyntax[extension] = slashComments;
 
 function typescriptComments(path: string, text: string) {
   const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
@@ -43,11 +67,47 @@ function typescriptComments(path: string, text: string) {
   visit(source);
   return [...ranges.values()].sort((left, right) => left.pos - right.pos).flatMap((range) => {
     const start = source.getLineAndCharacterOfPosition(range.pos).line;
-    return text.slice(range.pos, range.end).split(/\r?\n/).map((text, index) => ({
+    return text.slice(range.pos, range.end).split(/\r?\n/).map((lineText, index) => ({
       line: start + index + 1,
-      text: text.trim(),
+      text: lineText.trim(),
     }));
   });
+}
+
+function prefixedComments(text: string, syntax: CommentSyntax) {
+  const comments: CommentLine[] = [];
+  let insideBlock = false;
+  for (const [index, lineText] of text.split(/\r?\n/).entries()) {
+    if (insideBlock) insideBlock = !syntax.closesBlock.test(lineText);
+    else if (syntax.prefix.test(lineText)) insideBlock = syntax.opensBlock?.test(lineText) ?? false;
+    else continue;
+    comments.push({
+      line: index + 1,
+      text: lineText.trim(),
+    });
+  }
+  return comments;
+}
+
+async function addedLineRanges({
+  cwd,
+  base,
+  head,
+  path,
+}: {
+  cwd: string;
+  base: string;
+  head: string;
+  path: string;
+}) {
+  const diff = await git({
+    cwd,
+    args: ['diff', '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--unified=0', '--inter-hunk-context=0', base, head, '--', `:(literal)${path}`],
+  });
+  return [...diff.matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm)].map((match) => ({
+    start: Number(match[1]),
+    end: Number(match[1]) + Number(match[2] ?? 1),
+  }));
 }
 
 export async function reviewedComments({
@@ -59,47 +119,37 @@ export async function reviewedComments({
   cwd: string;
   paths: string[];
   base?: string;
-  head?: string;
+  head: string;
 }) {
   const comments: string[] = [];
-  for (const path of [...new Set(paths)].sort()) {
+  for (const path of [...paths].sort()) {
+    const javaScriptOrTypeScript = /\.[cm]?[jt]sx?$/i.test(path);
+    const syntax = commentSyntax[extname(path).toLowerCase()];
+    if (!javaScriptOrTypeScript && !syntax) continue;
     const absolute = regularFile({
       cwd,
-      path
+      path,
     });
     if (!absolute) continue;
     const bytes = readFileSync(absolute);
     if (bytes.includes(0)) continue;
     const text = bytes.toString('utf8');
-    const extension = extname(path).toLowerCase();
-    const prefix = commentPrefixes[extension];
-    const lines = /\.[cm]?[jt]sx?$/i.test(path)
+    const found = javaScriptOrTypeScript
       ? typescriptComments(path, text)
-      : text.split(/\r?\n/).flatMap((text, index) => prefix?.test(text)
-        ? [{
-          line: index + 1,
-          text: text.trim()
-        }]
-        : []);
-    if (!lines.length) continue;
-    let added: {
-      start: number;
-      end: number
-    }[] | undefined;
-    if (base) {
-      const diff = await git({
+      : prefixedComments(text, syntax);
+    if (!found.length) continue;
+    const added = base
+      ? await addedLineRanges({
         cwd,
-        args: ['diff', '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--unified=0', '--inter-hunk-context=0', base, head, '--', `:(literal)${path}`],
-      });
-      added = [...diff.matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm)].map((match) => ({
-        start: Number(match[1]),
-        end: Number(match[1]) + Number(match[2] ?? 1),
-      }));
-    }
-    for (const comment of lines)
+        base,
+        head,
+        path,
+      })
+      : undefined;
+    for (const comment of found)
       if (!added || added.some(({
         start,
-        end
+        end,
       }) => comment.line >= start && comment.line < end))
         comments.push(`${path}:${comment.line}: ${comment.text}`);
   }

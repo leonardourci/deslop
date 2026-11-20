@@ -571,6 +571,7 @@ test('the prompt opens with the intent file, else the open PR description, else 
   ].join('\n');
   writeFileSync(source, changed);
   writeFileSync(join(f.root, 'script.py'), '# fallback comment\nvalue = "# string"\n');
+  writeFileSync(join(f.root, 'deref.rs'), 'fn bump(count: &mut i32) {\n    /* block\n     * detail */\n    *count += 1;\n}\n');
   f.commit();
   f.git('config', 'color.ui', 'always');
   f.git('config', 'diff.interHunkContext', '20');
@@ -602,11 +603,11 @@ test('the prompt opens with the intent file, else the open PR description, else 
     'comments [review].tsx:10: * block detail',
     'comments [review].tsx:11: */',
     'comments [review].tsx:13: // final comment',
+    'deref.rs:2: /* block',
+    'deref.rs:3: * detail */',
     'script.py:1: # fallback comment',
   ].join('\n'));
-  assert.ok(prompts[0].indexOf('</details>') < prompts[0].indexOf('Comment lines to resolve'));
-  assert.ok(prompts[0].indexOf('Comment lines to resolve') < prompts[0].indexOf('Review and edit files only'));
-  assert.match(prompts[0], /<summary>Intentional slop<\/summary>\n\n- comments \[review\]\.tsx: listed constraint; required by the consumer\./);
+  assert.match(prompts[0], /<summary>Intentional slop<\/summary>\n\n- comments \[review\]\.tsx: listed constraint; required by the consumer\.\n\n<\/details>\n\nComment lines to resolve/);
   assert.equal(readFileSync(source, 'utf8'), changed);
   assert.match(prompts[1], /^Intent supplied with this review[^\n]*\nAsked: keep the retry/);
   const pr = f.load();
@@ -742,6 +743,7 @@ test('init creates repo config without a workflow and shape works outside a repo
   rmSync(join(f.root, 'deslop.config.json'));
   failed(f.call('init', '--command', 'tests=npm test', '--check', 'Tests'), 'CONFIG');
   assert.equal(readFileSync(external, 'utf8'), 'External template stays unchanged.');
+  assert.equal(existsSync(join(f.root, 'deslop.config.json')), false);
   const result = spawnSync(process.execPath, [f.cli, 'shape'], {
     cwd: f.home,
     env: f.env,

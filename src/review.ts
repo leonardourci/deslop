@@ -66,13 +66,13 @@ export function intentSection({ intent }: { intent?: string }) {
 }
 export function reviewPrompt({
   intent,
-  comments = [],
+  comments,
   instructions,
   target,
   findingsFile
 }: {
   intent?: string;
-  comments?: string[];
+  comments: string[];
   instructions: string;
   target: string;
   findingsFile: string;
