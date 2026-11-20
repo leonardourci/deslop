@@ -53,7 +53,7 @@ const PR_SECTIONS = [
   },
   {
     name: 'How to try this',
-    body: '## How to try this\n\n<!-- Optional. A first line Try: none, code or ui overrides the default for this PR. Then say what to exercise and with which inputs. -->\n',
+    body: '## How to try this\n\n<!-- Optional. A first line Try: none, Try: code or Try: ui overrides the repo's default for this PR. Then say what to exercise and with which inputs. -->\n',
   },
   {
     name: 'Intentional slop',
