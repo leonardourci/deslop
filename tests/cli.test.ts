@@ -302,6 +302,68 @@ test('failed checks resume the same session and produce bounded failure excerpts
   assert.equal(f.git('log', '-1', '--format=%s'), 'deslop: fix failing checks');
 });
 
+test('the try step exercises the change after green checks, fixes what breaks and honors the intent override', (t) => {
+  const f = fixture(t);
+  f.config.kinds[0].try = 'code';
+  f.config.tryNotes = 'node app.cjs serves port 5173';
+  f.configure();
+  f.commit();
+  const s = f.load();
+  s.actions = [
+    {},
+    {
+      files: { 'search.txt': 'accent-safe' },
+      findings: 'tried search with "é"; it threw; fixed\n',
+    },
+  ];
+  f.save(s);
+  const first = f.call('run', '--reviewer', 'fixture');
+  passed(first);
+  assert.match(first.stdout, /try: code \(kind\), \d+s/);
+  let calls = f.load().calls;
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[1].args, ['--resume', 'session-fixture']);
+  assert.match(calls[1].prompt, /Try mode: code\./);
+  assert.doesNotMatch(calls[1].prompt, /headless browser/);
+  assert.match(calls[1].prompt, /node app\.cjs serves port 5173/);
+  assert.ok(calls[1].prompt.includes(calls[1].tryDir));
+  assert.equal(existsSync(calls[1].tryDir), false);
+  assert.equal(f.git('log', '-1', '--format=%s'), 'deslop: fix try findings');
+  let data = f.runs().at(-1);
+  assert.deepEqual(data.checks.map((check) => check.ok), [true, true]);
+  assert.equal(data.try.mode, 'code');
+  assert.match(data.findings, /tried search/);
+  passed(f.call('status'));
+
+  const intent = join(f.home, 'intent.md');
+  writeFileSync(intent, 'Asked: accent-safe search.\n\n## How to try this\n\nTry: ui\n<!-- placeholder -->\nType é in the search box.\n\n<details>\n<summary>Intentional slop</summary>\n\n- none\n\n</details>\n');
+  const next = f.load();
+  next.actions = [{}, { unfixed: 'search still crashes on é' }];
+  f.save(next);
+  const red = f.call('run', '--intent', intent, '--reviewer', 'fixture');
+  assert.equal(red.status, 1);
+  assert.match(red.stdout, /check: try fail\n[\s\S]*unfixed:\nsearch still crashes on é/);
+  calls = f.load().calls;
+  assert.match(calls.at(-1).prompt, /Try mode: ui\./);
+  assert.match(calls.at(-1).prompt, /headless browser/);
+  assert.equal(
+    calls.at(-1).prompt.split('How to try this, from the intent:\n')[1].split('\nProject root:')[0],
+    'Type é in the search box.',
+  );
+  data = f.runs().at(-1);
+  assert.equal(data.try.source, 'intent');
+  assert.equal(data.checks.at(-1).name, 'try');
+  assert.equal(f.call('status').status, 1);
+
+  writeFileSync(intent, '## How to try this\nTry: none\n');
+  const before = f.load().calls.length;
+  passed(f.call('run', '--intent', intent, '--reviewer', 'fixture'));
+  assert.equal(f.load().calls.length, before + 1);
+  writeFileSync(intent, '## How to try this\nTry: maybe\n');
+  failed(f.call('run', '--intent', intent, '--reviewer', 'fixture'), 'USAGE');
+  assert.equal(f.load().calls.length, before + 1);
+});
+
 test('attempt limits return failures without proof and zero makes no check-fix call', (t) => {
   const f = fixture(t);
   f.config.checkFixAttempts = 0;
@@ -452,6 +514,7 @@ test('local override keeps fix commits local even when the starting commit was p
 test('providers deny git tools, retain sessions, detect hosted Codex and apply model precedence', (t) => {
   const f = fixture(t);
   f.env.CODEX_THREAD_ID = 'hosted';
+  f.config.kinds[0].try = 'code';
   f.config.reviewerModels = {
     codex: {
       model: 'repo',
@@ -479,9 +542,17 @@ test('providers deny git tools, retain sessions, detect hosted Codex and apply m
   assert.ok(calls[0].args.includes('model_reasoning_effort="high"'));
   assert.ok(calls[1].args.includes('resume'));
   assert.ok(calls[1].args.includes('session-fixture'));
+  assert.ok(calls[2].args.includes('features.shell_tool=true'));
+  assert.ok(calls[2].args.includes('permissions.deslop.network.enabled=true'));
+  assert.ok(calls[2].args.includes('session-fixture'));
   assert.equal(calls[0].parent, undefined);
   passed(f.call('run', '--reviewer', 'claude'));
-  const claude = f.load().calls.at(-1);
+  const [claude, claudeTry] = f.load().calls.slice(-2);
+  assert.ok(claudeTry.args.includes('Read,Glob,Grep,Edit,Write,Bash'));
+  assert.ok(
+    JSON.parse(claudeTry.args[claudeTry.args.indexOf('--settings') + 1])
+      .permissions.deny.includes('Bash(git:*)'),
+  );
   assert.ok(claude.args.includes('Read,Glob,Grep,Edit,Write'));
   assert.ok(claude.args.includes('--session-id'));
   const deny = JSON.parse(claude.args[claude.args.indexOf('--settings') + 1])

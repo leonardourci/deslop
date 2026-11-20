@@ -94,6 +94,7 @@ process.stdin.on('end', () => {
     parent: process.env.CODEX_THREAD_ID,
     pnyx: process.env.PNYX_TASK,
     findings: fs.readFileSync(process.env.DESLOP_FINDINGS_FILE, 'utf8'),
+    tryDir: process.env.DESLOP_TRY_DIR,
   });
   const action = state.actions.shift() || {};
   if (action.edit) fs.writeFileSync('work.txt', action.edit);
@@ -107,6 +108,7 @@ process.stdin.on('end', () => {
   if (action.config) cp.execFileSync('git', ['config', ...action.config]);
   if (action.checks) state.checks = action.checks;
   if (action.git) cp.execFileSync('git', ['commit', '--allow-empty', '-m', 'agent must not commit']);
+  if (action.unfixed) fs.writeFileSync(require('node:path').join(process.env.DESLOP_TRY_DIR, 'unfixed.md'), action.unfixed);
   if (action.findings) fs.appendFileSync(process.env.DESLOP_FINDINGS_FILE, action.findings);
   fs.writeFileSync(path, JSON.stringify(state));
   const args = process.argv.slice(2);

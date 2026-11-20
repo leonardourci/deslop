@@ -117,6 +117,12 @@ const SHAPE = {
   commits: ['commit'],
   newFiles: ['new.test.js'],
   findings: 'the agent findings text, verbatim',
+  try: {
+    mode: 'code|ui',
+    source: 'kind|intent',
+    seconds: 42,
+    unfixed: 'what still fails, when the try could not fix it',
+  },
   left: ['uncommitted.txt'],
   unstableCommands: ['pnpm lint:fix'],
 };
@@ -412,7 +418,7 @@ async function main({
   if (command === 'shape') {
     console.log(JSON.stringify(SHAPE, null, 2));
     console.log(
-      'Potentially long: findings, checks[], checks[].failures[], commits[]. Excerpts <=20 lines. Full logs can be large.',
+      'Potentially long: findings, try.unfixed, checks[], checks[].failures[], commits[]. Excerpts <=20 lines. Full logs can be large.',
     );
     return;
   }
