@@ -1,5 +1,6 @@
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -36,25 +37,52 @@ type CliOptions = RunOptions & {
   check?: string[];
   noPrTemplate?: boolean;
 };
-const PR_TEMPLATE = `## What was asked
-
-<!-- The request, including any workaround that was explicitly asked for and why. -->
-
-## What changed
-
-## How it was checked
-`;
-function hasPrTemplate({ root }: { root: string }) {
-  return ['', '.github', 'docs'].some((folder) => {
+const PR_SECTIONS = [
+  {
+    name: 'What was asked',
+    body: '## What was asked\n\n<!-- State the intent and why it matters. -->\n',
+  },
+  {
+    name: 'What changed',
+    body: '## What changed\n'
+  },
+  {
+    name: 'How it was checked',
+    body: '## How it was checked\n'
+  },
+  {
+    name: 'Intentional slop',
+    body: '<details>\n<summary>Intentional slop</summary>\n\n<!-- One item per line: file, what is kept, and why. -->\n\n</details>\n',
+  },
+];
+function prTemplates({ root }: { root: string }) {
+  const templates: string[] = [];
+  function collect(directory: string, nested = false) {
+    for (const entry of readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
+      if (!nested && !/^pull_request_template(\..+)?$/i.test(entry.name)) continue;
+      const path = join(directory, entry.name);
+      if (entry.isSymbolicLink())
+        throw new DeslopError('CONFIG', `Cannot merge a symlinked PR template: ${path}`);
+      if (entry.isFile()) templates.push(path);
+      else if (entry.isDirectory()) collect(path, true);
+    }
+  }
+  for (const folder of ['', '.github', 'docs']) {
     const directory = join(root, folder);
-    return (
-      existsSync(directory) &&
-      statSync(directory).isDirectory() &&
-      readdirSync(directory).some((name) =>
-        /^pull_request_template(\..+)?$/i.test(name),
-      )
-    );
-  });
+    if (existsSync(directory) && lstatSync(directory).isSymbolicLink())
+      throw new DeslopError('CONFIG', `Cannot merge PR templates through a symlink: ${directory}`);
+    if (existsSync(directory) && statSync(directory).isDirectory()) collect(directory);
+  }
+  return templates;
+}
+function mergePrSections(text: string) {
+  const sections = new Set([
+    ...[...text.matchAll(/^\s*#{1,6}\s+(.+?)\s*#*\s*$/gm)].map((match) => match[1].toLowerCase()),
+    ...[...text.matchAll(/<summary>\s*(.*?)\s*<\/summary>/gi)].map((match) => match[1].toLowerCase()),
+  ]);
+  const missing = PR_SECTIONS.filter(({ name }) => !sections.has(name.toLowerCase()));
+  if (!missing.length) return text;
+  return `${text}${text ? '\n\n' : ''}${missing.map(({ body }) => body).join('\n')}`;
 }
 
 const SHAPE = {
@@ -151,11 +179,17 @@ async function init({
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, `${JSON.stringify(config, null, 2)}\n`, { flag: 'wx' });
   console.log(`wrote: ${target}`);
-  if (!options.noPrTemplate && !hasPrTemplate({ root: places.root })) {
-    const template = join(places.root, '.github', 'pull_request_template.md');
-    mkdirSync(dirname(template), { recursive: true });
-    writeFileSync(template, PR_TEMPLATE, { flag: 'wx' });
-    console.log(`wrote: ${template}`);
+  if (!options.noPrTemplate) {
+    const templates = prTemplates({ root: places.root });
+    if (!templates.length) templates.push(join(places.root, '.github', 'pull_request_template.md'));
+    for (const template of templates) {
+      const before = existsSync(template) ? readFileSync(template, 'utf8') : '';
+      const after = mergePrSections(before);
+      if (after === before) continue;
+      mkdirSync(dirname(template), { recursive: true });
+      writeFileSync(template, after);
+      console.log(`wrote: ${template}`);
+    }
   }
   console.log(
     'next: configure commands and kinds, then commit before running deslop',

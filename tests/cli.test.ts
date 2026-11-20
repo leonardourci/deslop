@@ -700,6 +700,7 @@ test('init creates repo config without a workflow and shape works outside a repo
     readFileSync(template, 'utf8').match(/^## .+/gm),
     ['## What was asked', '## What changed', '## How it was checked'],
   );
+  assert.match(readFileSync(template, 'utf8'), /<details>\n<summary>Intentional slop<\/summary>/);
   failed(f.call('init'), 'CONFIG');
   const reinit = (...args) => {
     rmSync(join(f.root, 'deslop.config.json'));
@@ -707,9 +708,27 @@ test('init creates repo config without a workflow and shape works outside a repo
   };
   rmSync(template);
   mkdirSync(join(f.root, 'docs'));
-  writeFileSync(join(f.root, 'docs', 'PULL_REQUEST_TEMPLATE.txt'), 'Our template');
+  const existing = join(f.root, 'docs', 'PULL_REQUEST_TEMPLATE.txt');
+  const repoTemplate = '## Repository checklist\n\nKeep our checks.\n\n## What changed\n\nOur changes.\n';
+  writeFileSync(existing, repoTemplate);
+  reinit('--no-pr-template');
+  assert.equal(readFileSync(existing, 'utf8'), repoTemplate);
   reinit();
   assert.equal(existsSync(template), false);
+  const merged = readFileSync(existing, 'utf8');
+  assert.ok(merged.startsWith(repoTemplate));
+  assert.equal(merged.match(/## What changed/g).length, 1);
+  assert.match(merged, /## What was asked/);
+  assert.match(merged, /## How it was checked/);
+  assert.match(merged, /<summary>Intentional slop<\/summary>/);
+  reinit();
+  assert.equal(readFileSync(existing, 'utf8'), merged);
+  const alternatives = join(f.root, '.github', 'PULL_REQUEST_TEMPLATE');
+  mkdirSync(alternatives);
+  writeFileSync(join(alternatives, 'fix.md'), '## Bug details\n');
+  reinit();
+  assert.match(readFileSync(join(alternatives, 'fix.md'), 'utf8'), /^## Bug details\n[\s\S]*<summary>Intentional slop/);
+  rmSync(alternatives, { recursive: true });
   rmSync(join(f.root, 'docs'), { recursive: true });
   writeFileSync(join(f.root, 'docs'), 'a file, not a folder');
   reinit();
@@ -717,6 +736,12 @@ test('init creates repo config without a workflow and shape works outside a repo
   rmSync(template);
   reinit('--no-pr-template');
   assert.equal(existsSync(template), false);
+  const external = join(f.home, 'external-template.md');
+  writeFileSync(external, 'External template stays unchanged.');
+  symlinkSync(external, template);
+  rmSync(join(f.root, 'deslop.config.json'));
+  failed(f.call('init', '--command', 'tests=npm test', '--check', 'Tests'), 'CONFIG');
+  assert.equal(readFileSync(external, 'utf8'), 'External template stays unchanged.');
   const result = spawnSync(process.execPath, [f.cli, 'shape'], {
     cwd: f.home,
     env: f.env,
