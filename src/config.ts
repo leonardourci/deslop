@@ -12,6 +12,7 @@ import {
   defaultSkills,
   instructionPaths,
 } from './instructions.ts';
+import { TRY_MODES } from './try.ts';
 
 export const CONFIG_FILE = 'deslop.config.json';
 function fail(message: string): never {
@@ -77,6 +78,7 @@ export function validateConfig({
     'reviewers',
     'publishLocal',
     'fallbackLint',
+    'tryNotes',
   ];
   if (!object(config) || Object.keys(config).some((key) => !keys.includes(key)))
     fail('Config contains unsupported settings');
@@ -102,6 +104,11 @@ export function validateConfig({
     typeof config.fallbackLint !== 'boolean'
   )
     fail('fallbackLint must be boolean');
+  if (
+    config.tryNotes !== undefined &&
+    !(typeof config.tryNotes === 'string' && config.tryNotes.trim())
+  )
+    fail('tryNotes must be a nonempty string');
   if (config.instructions !== undefined)
     validateInstructions({
       instructions: config.instructions,
@@ -123,6 +130,8 @@ export function validateConfig({
       fail('Each kind needs a unique name, patterns, commands and checks');
     if (kind.ciRequired !== undefined && typeof kind.ciRequired !== 'boolean')
       fail(`ciRequired must be boolean in ${kind.name}`);
+    if (kind.try !== undefined && !TRY_MODES.includes(kind.try))
+      fail(`try must be none, code or ui in ${kind.name}`);
     if (kind.ciRequired && !kind.checks.length)
       fail(`ciRequired needs CI checks in ${kind.name}`);
     names.add(kind.name);

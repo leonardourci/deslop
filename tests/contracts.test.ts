@@ -294,7 +294,7 @@ else console.log('[[]]');
     else assert.match(result.stdout, /success/);
   });
 
-test('publication policy only accepts booleans and CI-required kinds need checks', (t) => {
+test('publication policy only accepts booleans, CI-required kinds need checks and try modes are known', (t) => {
   const f = fixture(t);
   assert.throws(
     () =>
@@ -339,6 +339,22 @@ test('publication policy only accepts booleans and CI-required kinds need checks
         },
       }),
     /ciRequired needs CI checks/,
+  );
+  assert.throws(
+    () =>
+      validateConfig({
+        root: f.root,
+        config: {
+          ...f.config,
+          kinds: [
+            {
+              ...f.config.kinds[0],
+              try: 'browser',
+            },
+          ],
+        } as unknown as Config,
+      }),
+    /try must be none, code or ui/,
   );
 });
 
