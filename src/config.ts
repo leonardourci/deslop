@@ -44,9 +44,8 @@ export function agentTimeoutDelay({
   const requirement = `${setting} must be a positive number of minutes with a delay of at most ${maximumDelay} ms`;
   if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0)
     fail(requirement);
-  const delay = minutes * 60_000;
-  if (delay > maximumDelay) fail(requirement);
-  return Math.max(1, delay);
+  if (minutes > maximumDelay / 60_000) fail(requirement);
+  return Math.max(1, Math.min(maximumDelay, minutes * 60_000));
 }
 export function validateModels({ models = {} }: { models?: Record<string, ModelChoice> }) {
   if (!object(models)) fail('reviewerModels must be an object');
