@@ -95,6 +95,7 @@ process.stdin.on('end', () => {
     pnyx: process.env.PNYX_TASK,
     findings: fs.readFileSync(process.env.DESLOP_FINDINGS_FILE, 'utf8'),
     tryDir: process.env.DESLOP_TRY_DIR,
+    tryEnv: [process.env.TMPDIR, process.env.GH_CONFIG_DIR, process.env.GIT_CONFIG_KEY_0 + '=' + process.env.GIT_CONFIG_VALUE_0],
   });
   const action = state.actions.shift() || {};
   if (action.edit) fs.writeFileSync('work.txt', action.edit);

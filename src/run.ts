@@ -165,12 +165,12 @@ function assertNoProofEdits({
   edited,
   cwd,
   config,
-  turn
+  label
 }: {
   edited: string[];
   cwd: string;
   config: Config;
-  turn: string;
+  label: string;
 }) {
   const protectedPaths = new Set(
     [
@@ -188,8 +188,29 @@ function assertNoProofEdits({
   )
     throw new DeslopError(
       'PROOF_EDIT',
-      `${turn} changed config or instructions; review those edits before rerunning`,
+      `${label} changed config or instructions; review those edits before rerunning`,
     );
+}
+async function resumedSession({
+  session,
+  data,
+  cwd
+}: {
+  session: Session;
+  data: RunData;
+  cwd: string;
+}) {
+  return {
+    ...session,
+    commits: data.commits,
+    context: {
+      findings: data.findings,
+      paths: await dirtyCommitPaths({
+        cwd,
+        commits: data.commits,
+      }),
+    },
+  };
 }
 type AgentTurn = Omit<Parameters<typeof agentEdits>[0], 'prompt' | 'turn' | 'tryDir'>;
 async function tryChange({
@@ -209,11 +230,13 @@ async function tryChange({
     selection,
   });
   if (plan.mode === 'none') return { session: turn.session };
+  const { data } = turn;
   const cwd = turn.places.root;
   const tryDir = realpathSync(mkdtempSync(join(tmpdir(), 'deslop-try-')));
   const unfixedFile = join(tryDir, 'unfixed.md');
   const started = Date.now();
-  let session, unfixed;
+  let session: Session | undefined;
+  let unfixed = '';
   try {
     session = await agentEdits({
       ...turn,
@@ -228,26 +251,34 @@ async function tryChange({
         findingsFile: turn.file,
       })}`,
     });
-    unfixed = existsSync(unfixedFile) ? readFileSync(unfixedFile, 'utf8').trim() : '';
+    if (existsSync(unfixedFile)) unfixed = readFileSync(unfixedFile, 'utf8').trim();
   } finally {
     rmSync(tryDir, {
       recursive: true,
       force: true,
     });
+    data.try = {
+      mode: plan.mode,
+      source: plan.source,
+      seconds: Math.round((Date.now() - started) / 1000),
+    };
   }
-  const { data } = turn;
-  data.try = {
-    mode: plan.mode,
-    source: plan.source,
-    seconds: Math.round((Date.now() - started) / 1000),
-    ...(unfixed ? { unfixed } : {}),
-  };
+  if (unfixed) data.try.unfixed = unfixed;
   assertNoProofEdits({
     edited: await dirtyPaths({ cwd }),
     cwd,
     config: turn.config,
-    turn: 'Try',
+    label: 'Try',
   });
+  const created = await git({
+    cwd,
+    args: ['ls-files', '--others', '--exclude-standard'],
+  });
+  if (created)
+    throw new DeslopError(
+      'TRY_FILES',
+      `Try left new files in the repository; move scratch output outside it: ${created.split('\n').join(', ')}`,
+    );
   const changed = await commitEdits({
     cwd,
     message: 'deslop: fix try findings',
@@ -255,6 +286,7 @@ async function tryChange({
   });
   if (unfixed) {
     const log = join(turn.dir, 'try.log');
+    const lines = unfixed.split('\n');
     writeFileSync(log, `${unfixed}\n`);
     data.checks.push({
       name: 'try',
@@ -263,8 +295,8 @@ async function tryChange({
       failures: [
         {
           test: `try (${plan.mode})`,
-          message: unfixed.split('\n')[0],
-          excerpt: unfixed.split('\n').slice(0, 20).join('\n'),
+          message: lines[0],
+          excerpt: lines.slice(0, 20).join('\n'),
         },
       ],
     });
@@ -622,17 +654,11 @@ async function performRun({
             config,
             settings,
             choices,
-            session: {
-              ...session,
-              commits: data.commits,
-              context: {
-                findings: data.findings,
-                paths: await dirtyCommitPaths({
-                  cwd,
-                  commits: data.commits,
-                }),
-              },
-            },
+            session: await resumedSession({
+              session,
+              data,
+              cwd,
+            }),
             data,
             dir,
             base: info.base,
@@ -680,17 +706,11 @@ async function performRun({
         config,
         settings,
         choices,
-        session: {
-          ...session,
-          commits: data.commits,
-          context: {
-            findings: data.findings,
-            paths: await dirtyCommitPaths({
-              cwd,
-              commits: data.commits,
-            }),
-          },
-        },
+        session: await resumedSession({
+          session,
+          data,
+          cwd,
+        }),
         prompt: `${intentSection({ intent })}\n${editorContract({ findingsFile: file })}\nFix these failed checks from the same review. Instructions:\n${instructionsFor({
           root: cwd,
           config,
@@ -715,7 +735,7 @@ async function performRun({
         edited: await dirtyPaths({ cwd }),
         cwd,
         config,
-        turn: 'Check fix',
+        label: 'Check fix',
       });
       const changed = await commitEdits({
         cwd,

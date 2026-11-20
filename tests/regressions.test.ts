@@ -289,15 +289,17 @@ test('legacy checkout locks fail closed without deleting an older writer', (t) =
   assert.equal(f.load().calls.length, 0);
 });
 
+for (const turn of ['check fixes', 'try turns'])
 for (const path of ['deslop.config.json', 'instructions.md'])
-  test(`check fixes cannot change ${path}`, (t) => {
+  test(`${turn} cannot change ${path}`, (t) => {
     const f = fixture(t);
     if (path === 'instructions.md') {
       writeFileSync(join(f.root, path), 'rules');
       f.config.instructions = { code: path };
-      f.configure();
     }
-    writeFileSync(join(f.root, 'work.txt'), 'bad');
+    if (turn === 'try turns') f.config.kinds[0].try = 'code';
+    f.configure();
+    if (turn === 'check fixes') writeFileSync(join(f.root, 'work.txt'), 'bad');
     f.commit();
     const s = f.load();
     s.actions = [{}, { files: { [path]: 'changed' } }];

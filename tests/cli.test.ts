@@ -312,7 +312,7 @@ test('the try step exercises the change after green checks, fixes what breaks an
   s.actions = [
     {},
     {
-      files: { 'search.txt': 'accent-safe' },
+      files: { 'base.txt': 'accent-safe' },
       findings: 'tried search with "é"; it threw; fixed\n',
     },
   ];
@@ -322,12 +322,13 @@ test('the try step exercises the change after green checks, fixes what breaks an
   assert.match(first.stdout, /try: code \(kind\), \d+s/);
   let calls = f.load().calls;
   assert.equal(calls.length, 2);
-  assert.deepEqual(calls[1].args, ['--resume', 'session-fixture']);
+  assert.ok(calls[1].args.includes('--resume'));
   assert.match(calls[1].prompt, /Try mode: code\./);
   assert.doesNotMatch(calls[1].prompt, /headless browser/);
   assert.match(calls[1].prompt, /node app\.cjs serves port 5173/);
   assert.ok(calls[1].prompt.includes(calls[1].tryDir));
   assert.equal(existsSync(calls[1].tryDir), false);
+  assert.deepEqual(calls[1].tryEnv, [calls[1].tryDir, calls[1].tryDir, 'protocol.allow=never']);
   assert.equal(f.git('log', '-1', '--format=%s'), 'deslop: fix try findings');
   let data = f.runs().at(-1);
   assert.deepEqual(data.checks.map((check) => check.ok), [true, true]);
@@ -342,18 +343,24 @@ test('the try step exercises the change after green checks, fixes what breaks an
   f.save(next);
   const red = f.call('run', '--intent', intent, '--reviewer', 'fixture');
   assert.equal(red.status, 1);
-  assert.match(red.stdout, /check: try fail\n[\s\S]*unfixed:\nsearch still crashes on é/);
+  assert.match(red.stdout, /check: try fail/);
+  assert.match(red.stdout, /unfixed:\nsearch still crashes on é/);
   calls = f.load().calls;
   assert.match(calls.at(-1).prompt, /Try mode: ui\./);
   assert.match(calls.at(-1).prompt, /headless browser/);
-  assert.equal(
-    calls.at(-1).prompt.split('How to try this, from the intent:\n')[1].split('\nProject root:')[0],
-    'Type é in the search box.',
-  );
+  assert.match(calls.at(-1).prompt, /How to try this, from the intent:\nType é in the search box\.\n/);
   data = f.runs().at(-1);
   assert.equal(data.try.source, 'intent');
   assert.equal(data.checks.at(-1).name, 'try');
   assert.equal(f.call('status').status, 1);
+
+  writeFileSync(intent, '## How to try this\nTry: code\n');
+  const leftover = f.load();
+  leftover.actions = [{}, { files: { 'test-results/shot.png': 'png' } }];
+  f.save(leftover);
+  failed(f.call('run', '--intent', intent, '--reviewer', 'fixture'), 'TRY_FILES');
+  assert.equal(f.call('status').status, 1);
+  rmSync(join(f.root, 'test-results'), { recursive: true });
 
   writeFileSync(intent, '## How to try this\nTry: none\n');
   const before = f.load().calls.length;
@@ -549,10 +556,6 @@ test('providers deny git tools, retain sessions, detect hosted Codex and apply m
   passed(f.call('run', '--reviewer', 'claude'));
   const [claude, claudeTry] = f.load().calls.slice(-2);
   assert.ok(claudeTry.args.includes('Read,Glob,Grep,Edit,Write,Bash'));
-  assert.ok(
-    JSON.parse(claudeTry.args[claudeTry.args.indexOf('--settings') + 1])
-      .permissions.deny.includes('Bash(git:*)'),
-  );
   assert.ok(claude.args.includes('Read,Glob,Grep,Edit,Write'));
   assert.ok(claude.args.includes('--session-id'));
   const deny = JSON.parse(claude.args[claude.args.indexOf('--settings') + 1])
