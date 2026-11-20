@@ -112,7 +112,8 @@ async function agentEdits({
   });
   const scopePrompt = `\nProject root: ${places.root}\nEditable tracked instruction files in this diff: ${JSON.stringify(scope.instructionFiles)}\nExisting untracked/ignored paths are excluded: ${JSON.stringify(scope.excluded)}\nNew normal source/test files are allowed; other instruction files and git metadata are not.\n`;
   writeFileSync(file, data.findings);
-  const call = turn > 0 ? `check-fix ${turn}` : data.mode === 'clean' ? 'clean' : 'review';
+  const call =
+    typeof turn === 'string' ? turn : turn > 0 ? `check-fix ${turn}` : data.mode === 'clean' ? 'clean' : 'review';
   let result, failure;
   try {
     result = await review({
