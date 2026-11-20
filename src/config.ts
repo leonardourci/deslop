@@ -33,6 +33,20 @@ export function readJson({ path }: { path: string }) {
     fail(`Cannot read ${path}: ${error.message}`);
   }
 }
+export function agentTimeoutDelay({
+  minutes,
+  setting = 'agentTimeoutMinutes',
+}: {
+  minutes: unknown;
+  setting?: string;
+}) {
+  const maximumDelay = 2_147_483_647;
+  const requirement = `${setting} must be a positive number of minutes with a delay of at most ${maximumDelay} ms`;
+  if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0)
+    fail(requirement);
+  if (minutes > maximumDelay / 60_000) fail(requirement);
+  return Math.max(1, Math.min(maximumDelay, minutes * 60_000));
+}
 export function validateModels({ models = {} }: { models?: Record<string, ModelChoice> }) {
   if (!object(models)) fail('reviewerModels must be an object');
   for (const [provider, choice] of Object.entries(models)) {
@@ -59,6 +73,7 @@ export function validateConfig({
     'instructions',
     'checkFixAttempts',
     'reviewerModels',
+    'agentTimeoutMinutes',
     'reviewers',
     'publishLocal',
     'fallbackLint',
@@ -130,6 +145,8 @@ export function validateConfig({
     )
       fail(`Unknown instructions in ${kind.name}`);
   }
+  if (config.agentTimeoutMinutes !== undefined)
+    agentTimeoutDelay({ minutes: config.agentTimeoutMinutes });
   validateModels({ models: config.reviewerModels });
   if (config.reviewers !== undefined) {
     if (!object(config.reviewers))
@@ -266,7 +283,7 @@ export function loadSettings({ home }: { home: string }): Settings {
   if (
     !object(settings) ||
     Object.keys(settings).some(
-      (key) => !['reviewer', 'reviewerModels'].includes(key),
+      (key) => !['reviewer', 'reviewerModels', 'agentTimeoutMinutes'].includes(key),
     )
   )
     fail('Unsupported machine settings');
@@ -276,6 +293,8 @@ export function loadSettings({ home }: { home: string }): Settings {
     !(strings(settings.reviewer) && settings.reviewer.length)
   )
     fail('reviewer must be a provider or nonempty list');
+  if (settings.agentTimeoutMinutes !== undefined)
+    agentTimeoutDelay({ minutes: settings.agentTimeoutMinutes });
   validateModels({ models: settings.reviewerModels });
   return settings;
 }

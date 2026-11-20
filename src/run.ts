@@ -105,6 +105,7 @@ async function agentEdits({
   });
   const scopePrompt = `\nProject root: ${places.root}\nEditable tracked instruction files in this diff: ${JSON.stringify(scope.instructionFiles)}\nExisting untracked/ignored paths are excluded: ${JSON.stringify(scope.excluded)}\nNew normal source/test files are allowed; other instruction files and git metadata are not.\n`;
   writeFileSync(file, data.findings);
+  const call = turn > 0 ? `check-fix ${turn}` : data.mode === 'clean' ? 'clean' : 'review';
   let result, failure;
   try {
     result = await review({
@@ -119,6 +120,8 @@ async function agentEdits({
       session,
       model: options.reviewerModel,
       effort: options.reviewerEffort,
+      agentTimeoutMinutes: options.agentTimeoutMinutes,
+      call,
     });
   } catch (error) {
     failure = error;
@@ -126,11 +129,15 @@ async function agentEdits({
   data.findings = existsSync(file) ? readFileSync(file, 'utf8') : '';
   save();
   if (result) writeFileSync(join(dir, `agent-${turn}.log`), result.output);
-  if ((await gitState({ cwd: places.root })) !== before)
+  if ((await gitState({ cwd: places.root })) !== before) {
+    const message = 'Agent changed git state; deslop refuses to commit, push or mark this run';
+    if (failure?.code === 'AGENT_TIMEOUT')
+      throw new DeslopError('AGENT_TIMEOUT', `${failure.message} ${message}`);
     throw new DeslopError(
       'AGENT_GIT',
-      'Agent changed git state; deslop refuses to commit, push or mark this run',
+      message,
     );
+  }
   if (failure) throw failure;
   if (turn === 0)
     await assertInstructionScope({
@@ -654,6 +661,8 @@ function printSummary({
 }) {
   if (data.remoteWarning) console.log(data.remoteWarning);
   console.log(`verdict: ${data.verdict}`);
+  if (data.error?.code === 'AGENT_TIMEOUT')
+    console.log(`error: ${data.error.code}: ${data.error.message}`);
   if (data.verdict === 'passed')
     console.log(
       `proof: ${data.published ? 'git note and GitHub status' : 'local git note'}\nstatus: ${data.published ? 'published' : data.statusReason || 'not published yet; run deslop status --publish after pushing or when GitHub recovers'}`,
