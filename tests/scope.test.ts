@@ -25,11 +25,14 @@ test('only tracked instruction files in the diff gain write access and git stays
     config: f.config,
   });
   assert.deepEqual(scope.instructionFiles, ['.agents/changed.md']);
+  const findingsFile = join(f.home, '.deslop', 'repos', 'repo', 'reviews', 'run.json');
   const files = codexFilesystem({
     cwd: f.root,
     common: join(f.root, '.git'),
     scope,
+    findingsFile,
   });
+  assert.equal(files[findingsFile], 'write');
   assert.equal(files[join(f.root, '.agents/changed.md')], 'write');
   assert.equal(files[join(f.root, '.agents/unchanged.md')], 'read');
   assert.equal(files[join(f.root, '.agents/ignored.md')], 'deny');
@@ -40,7 +43,9 @@ test('only tracked instruction files in the diff gain write access and git stays
     cwd: f.root,
     common: join(f.root, '.git'),
     scope,
+    findingsFile,
   });
+  assert.ok(claude.allow.includes(`Write(/${findingsFile})`));
   assert.ok(
     claude.allow.includes(`Edit(/${join(f.root, '.agents/changed.md')})`),
   );
@@ -66,7 +71,8 @@ test('excluded filenames are literal Claude read denies', async (t) => {
   const rules = claudeEdits({
     cwd: f.root,
     common: join(f.root, '.git'),
-    scope
+    scope,
+    findingsFile: join(f.home, 'findings.txt'),
   });
   assert.ok(rules.deny.includes(`Read(/${f.root}/private\\[prod\\]\\*\\?.json)`));
 });

@@ -6,8 +6,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { homedir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { git, DeslopError } from './process.ts';
 import { loadConfig, loadSettings, select, instructionsFor } from './config.ts';
 import { branchInfo, remoteHead, pushFixes, commitStatus } from './github.ts';
@@ -23,7 +22,7 @@ import {
   instructionPath,
   regularFile,
 } from './scope.ts';
-import { EDITOR_CONTRACT } from './editor-contract.ts';
+import { editorContract } from './editor-contract.ts';
 import type { Config, Places, RunData, RunOptions, Session, Settings } from './types.ts';
 
 async function cleanTree({ cwd }: { cwd: string }) {
@@ -78,6 +77,8 @@ async function agentEdits({
   turn,
   base,
   paths,
+  file,
+  save,
 }: {
   places: Places;
   options: RunOptions;
@@ -91,6 +92,8 @@ async function agentEdits({
   turn: number;
   base: string;
   paths?: string[];
+  file: string;
+  save: () => void;
 }) {
   const before = await gitState({ cwd: places.root });
   const scope = await reviewScope({
@@ -100,6 +103,7 @@ async function agentEdits({
     config,
   });
   const scopePrompt = `\nProject root: ${places.root}\nEditable tracked instruction files in this diff: ${JSON.stringify(scope.instructionFiles)}\nExisting untracked/ignored paths are excluded: ${JSON.stringify(scope.excluded)}\nNew normal source/test files are allowed; other instruction files and git metadata are not.\n`;
+  writeFileSync(file, data.findings);
   let result, failure;
   try {
     result = await review({
@@ -109,6 +113,7 @@ async function agentEdits({
       config,
       settings,
       prompt: prompt + scopePrompt,
+      findingsFile: file,
       scope,
       session,
       model: options.reviewerModel,
@@ -117,6 +122,9 @@ async function agentEdits({
   } catch (error) {
     failure = error;
   }
+  data.findings = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  save();
+  if (result) writeFileSync(join(dir, `agent-${turn}.log`), result.output);
   if ((await gitState({ cwd: places.root })) !== before)
     throw new DeslopError(
       'AGENT_GIT',
@@ -135,23 +143,7 @@ async function agentEdits({
       ...edited.filter((path) => path.startsWith('.github/workflows/')),
     ]),
   ];
-  writeFileSync(
-    join(dir, `review-${turn}.json`),
-    JSON.stringify(result, null, 2),
-  );
-  if (turn === 0) {
-    data.review.items = result.items;
-    data.review.found = result.items.length;
-    data.review.fixed = result.items.filter((item) => item.fixed).length;
-  } else
-    data.checkFixes.push({
-      turn,
-      items: result.items,
-    });
-  return {
-    ...result.session,
-    unfixed: result.items.some((item) => !item.fixed),
-  };
+  return result.session;
 }
 export async function run({
   places,
@@ -220,13 +212,14 @@ async function performRun({
     dir = join(root, 'runs', runId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(root, '.gitignore'), '*\n');
-  const file = await claimRecord({
-    cwd,
+  const file = claimRecord({
+    places,
     branch: info.branch,
     pr: info.pr?.number,
   });
   const data: RunData = {
     id: runId,
+    date: new Date().toISOString(),
     repo: cwd,
     branch: info.branch,
     pr: info.pr?.number,
@@ -241,14 +234,9 @@ async function performRun({
     initialHead,
     head: initialHead,
     checks: [],
-    review: {
-      found: 0,
-      fixed: 0,
-      items: [],
-    },
     commits: [],
-    checkFixes: [],
     newFiles: [],
+    findings: '',
   };
   if (remoteError)
     data.remoteWarning = 'origin unreachable; ran local commands';
@@ -265,7 +253,6 @@ async function performRun({
     }
   };
   const save = () => writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
-  save();
   try {
     const cleanPaths = options.paths
       ? (
@@ -322,6 +309,7 @@ async function performRun({
       prompt: reviewPrompt({
         intent,
         target,
+        findingsFile: file,
         instructions: instructionsFor({
           root: cwd,
           config,
@@ -333,23 +321,14 @@ async function performRun({
       turn: 0,
       base: info.base,
       paths: cleanPaths,
+      file,
+      save,
     });
-    const unfixed = data.review.items.some((item) => !item.fixed);
-    if (unfixed) {
-      await invalidateVerdict({
-        head: await git({
-          cwd,
-          args: ['rev-parse', 'HEAD'],
-        }),
-      });
-    }
     await commitEdits({
       cwd,
       message: 'deslop: fix review findings',
       data,
     });
-    if (unfixed)
-      throw new DeslopError('UNFIXED', 'Agent left review findings unfixed');
     config = await loadConfig({ places });
     let fixes = 0,
       checkedHead,
@@ -524,14 +503,14 @@ async function performRun({
           ...session,
           commits: data.commits,
           context: {
-            review: data.review.items,
+            findings: data.findings,
             paths: await dirtyCommitPaths({
               cwd,
               commits: data.commits,
             }),
           },
         },
-        prompt: `${intentSection({ intent })}\n${EDITOR_CONTRACT}\nFix these failed checks from the same review. Instructions:\n${instructionsFor({
+        prompt: `${intentSection({ intent })}\n${editorContract({ findingsFile: file })}\nFix these failed checks from the same review. Instructions:\n${instructionsFor({
           root: cwd,
           config,
           selection: currentSelection
@@ -548,6 +527,8 @@ async function performRun({
         turn: fixes,
         base: info.base,
         paths: cleanPaths,
+        file,
+        save,
       });
       const edited = await dirtyPaths({ cwd });
       const protectedPaths = new Set(
@@ -578,8 +559,6 @@ async function performRun({
           'NO_FIX',
           'Agent made no changes for the failed checks',
         );
-      if (session.unfixed)
-        throw new DeslopError('UNFIXED', 'Agent left check fixes unresolved');
     }
     await cleanTree({ cwd });
     data.head = await git({
@@ -593,7 +572,6 @@ async function performRun({
       version: 1,
       head: data.head,
       verdict: 'passed',
-      review: data.review,
       checks: finalChecks,
       mode: data.mode,
       paths: data.paths,
@@ -675,35 +653,31 @@ function printSummary({
     );
   for (const check of data.checks)
     console.log(`check: ${check.name} ${check.ok ? 'pass' : 'fail'}`);
-  console.log(`review: found ${data.review.found}, fixed ${data.review.fixed}`);
+  const findings = data.findings.trim();
+  const lines = findings.split('\n').length;
+  if (!findings) console.log('findings: none');
+  else if (lines > MAX_SUMMARY_LINES)
+    console.log(`findings: ${lines} lines; read findings in ${path}`);
+  else console.log(`findings:\n${findings}`);
   if (data.left?.length) console.log(`left: ${data.left.join(', ')}`);
   if (data.unstableCommands?.length)
     console.log(`unstable commands: ${data.unstableCommands.join(', ')}`);
   if (data.workflowEdits?.length)
     console.log(`workflows: ${data.workflowEdits.join(', ')}`);
-  for (const item of data.review.items)
-    console.log(
-      `review: ${item.id} ${item.fixed ? 'fixed' : 'unfixed'} ${item.problem.replaceAll('\n', ' ').slice(0, 240)}`,
-    );
   console.log(
     `commits: ${data.commits.join(', ') || 'none'}${data.unpushed ? ' (local, not pushed)' : ''}\ndetails: ${path}\nshape: deslop shape\nlogs: checks[].log (full logs can be large)`,
   );
 }
 
-async function claimRecord({
-  cwd,
+function claimRecord({
+  places,
   branch,
   pr
 }: {
-  cwd: string;
+  places: Places;
   branch: string;
   pr?: number;
 }) {
-  const origin = await optionalGit({
-    cwd,
-    args: ['remote', 'get-url', 'origin'],
-  });
-  const repo = basename(origin || cwd).replace(/\.git$/, '');
   const now = new Date();
   const date = [
     now.getFullYear(),
@@ -712,8 +686,8 @@ async function claimRecord({
   ]
     .map((part) => String(part).padStart(2, '0'))
     .join('-');
-  const stem = `${date}-${repo}-${pr ? `PR-${pr}` : branch}`.replace(/[^\w.-]+/g, '-');
-  const dir = join(homedir(), 'deslop', 'reviews');
+  const stem = `${date}-${pr ? `PR-${pr}` : branch}`.replace(/[^\w.-]+/g, '-');
+  const dir = join(places.repoHome, 'reviews');
   mkdirSync(dir, { recursive: true });
   for (let copy = 1; ; copy++) {
     const file = join(dir, copy === 1 ? `${stem}.json` : `${stem}-${copy}.json`);
@@ -725,6 +699,7 @@ async function claimRecord({
     }
   }
 }
+const MAX_SUMMARY_LINES = 20;
 const MAX_FILE_BYTES = 32 * 1024;
 const MAX_CONTENT_BYTES = 128 * 1024;
 const MAX_INTENT_BYTES = 32 * 1024;
@@ -846,7 +821,7 @@ async function invalidate({
       head,
       branch,
       state: 'failure',
-      description: 'Review or checks failed',
+      description: 'Checks failed',
     });
   } catch (error) {
     if (!['COMMAND', 'COMMAND_TIMEOUT', 'ENOENT'].includes(error.code))

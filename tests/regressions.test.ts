@@ -20,26 +20,27 @@ test('initial review config edits determine the checks used for proof', (t) => {
   assert.equal(f.call('status').status, 1);
 });
 
-test('a missing Codex result after edits stops before fallback', (t) => {
+test('a Codex failure after edits stops before fallback', (t) => {
   const f = fixture(t);
   writeFileSync(
     join(f.bin, 'codex'),
     `#!/usr/bin/env node
-process.stdin.resume();process.stdin.on('end',()=>{require('node:fs').writeFileSync('work.txt','partial');});
+process.stdin.resume();process.stdin.on('end',()=>{const fs=require('node:fs');fs.writeFileSync('work.txt','partial');fs.appendFileSync(process.env.DESLOP_FINDINGS_FILE,'partial finding\\n');process.exit(1);});
 `,
     { mode: 0o755 },
   );
-  mkdirSync(join(f.home, 'config/deslop'), { recursive: true });
+  mkdirSync(join(f.home, '.deslop'), { recursive: true });
   writeFileSync(
-    join(f.home, 'config/deslop/settings.json'),
+    join(f.home, '.deslop/settings.json'),
     JSON.stringify({ reviewer: ['codex', 'fixture'] }),
   );
   const result = f.call('run');
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stderr, /ENOENT/);
+  assert.match(result.stderr, /code: COMMAND/);
   assert.equal(f.load().calls.length, 0);
   assert.equal(readFileSync(join(f.root, 'work.txt'), 'utf8'), 'partial');
   assert.deepEqual(f.runs()[0].commits, []);
+  assert.equal(f.runs()[0].findings, 'partial finding\n');
   assert.equal(f.call('status').status, 1);
 });
 
@@ -195,36 +196,6 @@ test('commit statuses count as exact-head CI checks', (t) => {
   );
 });
 
-test('unfixed check repairs end red and stay separate from review findings', (t) => {
-  const f = fixture(t);
-  writeFileSync(join(f.root, 'work.txt'), 'bad');
-  f.commit();
-  const s = f.load();
-  s.actions = [
-    {},
-    {
-      edit: 'good',
-      items: [
-        {
-          id: 'R1',
-          where: 'work.txt',
-          problem: 'unresolved',
-          fixed: false,
-          kind: 'defect',
-        },
-      ],
-    },
-  ];
-  f.save(s);
-  const r = f.call('run', '--reviewer', 'fixture');
-  assert.equal(r.status, 1);
-  assert.match(r.stderr, /UNFIXED/);
-  const d = f.runs()[0];
-  assert.equal(d.review.found, 0);
-  assert.equal(d.checkFixes[0].items[0].fixed, false);
-  assert.equal(f.call('status').status, 1);
-});
-
 test('failure excerpts cap long lines and identify individual tests', (t) => {
   const f = fixture(t);
   f.config.checkFixAttempts = 0;
@@ -291,7 +262,7 @@ test('remote movement prevents pushing review fixes', (t) => {
   f.config.reviewers.fixture.command = [
     'node',
     '-e',
-    `process.stdin.resume();process.stdin.on('end',()=>{require('node:child_process').execFileSync('git',['--git-dir',${JSON.stringify(remote)},'update-ref','refs/heads/change',${JSON.stringify(base)}]);require('node:fs').writeFileSync('work.txt','fixed');console.log(JSON.stringify({items:[]}))});`,
+    `process.stdin.resume();process.stdin.on('end',()=>{require('node:child_process').execFileSync('git',['--git-dir',${JSON.stringify(remote)},'update-ref','refs/heads/change',${JSON.stringify(base)}]);require('node:fs').writeFileSync('work.txt','fixed');});`,
   ];
   f.configure();
   f.commit();
@@ -396,7 +367,7 @@ test('clean provider failures fall back with their own model settings', (t) => {
   f.config.reviewerModels = { fixture: { model: 'fallback-model' } };
   f.configure();
   f.commit();
-  const home = join(f.home, 'config', 'deslop');
+  const home = join(f.home, '.deslop');
   mkdirSync(home, { recursive: true });
   writeFileSync(
     join(home, 'settings.json'),
@@ -413,13 +384,12 @@ test('red rerun removes a previous note and publishes failure together', (t) => 
   const s = f.load();
   s.actions = [
     {
-      items: [
+      checks: [
         {
-          id: 'R1',
-          where: 'work.txt',
-          problem: 'unfixed',
-          fixed: false,
-          kind: 'defect',
+          id: 1,
+          name: 'Tests',
+          status: 'completed',
+          conclusion: 'failure',
         },
       ],
     },
@@ -443,7 +413,7 @@ test('a failed remote lookup is reported when local commands replace CI', (t) =>
   assert.match(r.stdout, /origin unreachable; ran local commands/);
 });
 
-test('fresh check repairs receive review items and paths and keep review counts stable', (t) => {
+test('fresh check repairs receive earlier findings and paths and append their own', (t) => {
   const f = fixture(t);
   delete f.config.reviewers.fixture.resume;
   f.configure();
@@ -452,27 +422,11 @@ test('fresh check repairs receive review items and paths and keep review counts 
   s.actions = [
     {
       edit: 'still bad',
-      items: [
-        {
-          id: 'R1',
-          where: 'work.txt',
-          problem: 'earlier review finding',
-          fixed: true,
-          kind: 'defect',
-        },
-      ],
+      findings: 'earlier review finding\n',
     },
     {
       edit: 'good',
-      items: [
-        {
-          id: 'R1',
-          where: 'work.txt',
-          problem: 'check repair',
-          fixed: true,
-          kind: 'defect',
-        },
-      ],
+      findings: 'check repair\n',
     },
   ];
   f.save(s);
@@ -482,10 +436,13 @@ test('fresh check repairs receive review items and paths and keep review counts 
   assert.match(prompt, /earlier review finding/);
   assert.match(prompt, /work.txt/);
   assert.equal((prompt.match(/Review and edit files only/g) || []).length, 1);
-  assert.match(r.stdout, /review: found 1, fixed 1/);
+  assert.match(r.stdout, /findings:\nearlier review finding\ncheck repair/);
   assert.match(r.stdout, /local, not pushed/);
-  assert.equal(f.runs()[0].review.found, 1);
-  assert.equal(f.runs()[0].checkFixes.length, 1);
+  assert.equal(f.runs()[0].findings, 'earlier review finding\ncheck repair\n');
+  assert.deepEqual(
+    f.load().calls.map((call) => call.findings),
+    ['', 'earlier review finding\n'],
+  );
 });
 
 test('status publication timeouts preserve successful local proof', (t) => {
@@ -522,30 +479,6 @@ test('nonliteral true enables worktree configuration guarding', async (t) => {
   f.git('config', '--worktree', 'unrelated.value', 'changed');
   assert.notEqual(await gitState({ cwd: f.root }), before);
 });
-
-test('unfixed findings invalidate proof before a rejecting commit hook', (t) => {
-  const f = fixture(t);
-  f.git('config', 'core.hooksPath', '.git/hooks');
-  const hook = join(f.root, '.git/hooks/pre-commit');
-  writeFileSync(hook, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
-  pass(f.call('run', '--local', '--reviewer', 'fixture'));
-  const s = f.load();
-  s.actions = [{
-    edit: 'changed',
-    items: [{
-      id: 'R1',
-      where: 'work.txt',
-      problem: 'unfixed',
-      fixed: false,
-      kind: 'defect'
-    }]
-  }];
-  f.save(s);
-  assert.equal(f.call('run', '--local', '--reviewer', 'fixture').status, 1);
-  f.git('reset', '--hard', 'HEAD');
-  assert.equal(f.call('status').status, 1);
-});
-
 
 test('a remote move after push preflight cannot be overwritten', (t) => {
   const f = fixture(t);

@@ -1,51 +1,11 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirtyPaths, gitState } from './git.ts';
 import { execute, DeslopError } from './process.ts';
 import { codexFilesystem, claudeEdits } from './scope.ts';
-import { EDITOR_CONTRACT } from './editor-contract.ts';
-import type { Config, ReviewItem, Scope, Session, Settings } from './types.ts';
+import { editorContract } from './editor-contract.ts';
+import type { Config, Scope, Session, Settings } from './types.ts';
 
-type Schema = {
-  type: string;
-  additionalProperties?: false;
-  properties?: Record<string, Schema>;
-  required?: string[];
-  items?: Schema;
-  enum?: string[];
-  pattern?: string;
-};
-const ITEM_SCHEMA: Schema = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    id: {
-      type: 'string',
-      pattern: '\\S'
-    },
-    where: { type: 'string' },
-    problem: { type: 'string' },
-    fixed: { type: 'boolean' },
-    kind: {
-      type: 'string',
-      enum: ['defect', 'note', 'verification']
-    },
-  },
-  required: ['id', 'where', 'problem', 'fixed', 'kind'],
-};
-export const REVIEW_SCHEMA: Schema = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    items: {
-      type: 'array',
-      items: ITEM_SCHEMA,
-    },
-  },
-  required: ['items'],
-};
 export function runningAgent({ env = process.env }: { env?: NodeJS.ProcessEnv } = {}) {
   if (env.CODEX_THREAD_ID || env.CODEX_SESSION_ID) return 'codex';
   if (env.CLAUDECODE || env.CLAUDE_CODE_ENTRYPOINT) return 'claude';
@@ -107,61 +67,15 @@ export function intentSection({ intent }: { intent?: string }) {
 export function reviewPrompt({
   intent,
   instructions,
-  target
+  target,
+  findingsFile
 }: {
   intent?: string;
   instructions: string;
   target: string;
+  findingsFile: string;
 }) {
-  return `${intentSection({ intent })}\n${EDITOR_CONTRACT}\nFollow only the selected review instructions. Fix findings directly. No check results are supplied to this first review. Instructions:\n${instructions}\n\n${target}`;
-}
-function conforms({
-  schema,
-  value
-}: {
-  schema: Schema;
-  value: unknown;
-}) {
-  if (schema.type !== 'object')
-    return (
-      typeof value === schema.type &&
-      (!schema.enum || schema.enum.includes(value as string)) &&
-      (!schema.pattern || new RegExp(schema.pattern).test(value as string))
-    );
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value) &&
-    schema.required.every((key) => Object.hasOwn(value, key)) &&
-    Object.entries(value).every(
-      ([key, field]) =>
-        Object.hasOwn(schema.properties, key) &&
-        conforms({
-          schema: schema.properties[key],
-          value: field,
-        }),
-    )
-  );
-}
-function parseReview({ value }: { value: { items?: unknown[] } }) {
-  if (!value || !Array.isArray(value.items))
-    throw new DeslopError('REVIEW_OUTPUT', 'Agent must return items');
-  const ids = new Set<string>();
-  for (const [index, item] of value.items.entries()) {
-    if (
-      !conforms({
-        schema: ITEM_SCHEMA,
-        value: item,
-      }) ||
-      ids.has((item as ReviewItem).id)
-    )
-      throw new DeslopError(
-        'REVIEW_OUTPUT',
-        `Invalid review item ${index + 1}: ${JSON.stringify(item).slice(0, 300)}`,
-      );
-    ids.add((item as ReviewItem).id);
-  }
-  return (value.items as ReviewItem[]).filter((item) => item.kind === 'defect');
+  return `${intentSection({ intent })}\n${editorContract({ findingsFile })}\nFollow only the selected review instructions. No check results are supplied to this first review. Instructions:\n${instructions}\n\n${target}`;
 }
 export async function review({
   cwd,
@@ -170,6 +84,7 @@ export async function review({
   config,
   settings,
   prompt,
+  findingsFile,
   session,
   model,
   effort,
@@ -189,6 +104,7 @@ export async function review({
   config: Pick<Config, 'reviewers' | 'reviewerModels'>;
   settings: Settings;
   prompt: string;
+  findingsFile: string;
   session?: Session;
   model?: string;
   effort?: string;
@@ -197,8 +113,10 @@ export async function review({
   env?: NodeJS.ProcessEnv;
 }) {
   const providers = session ? [session.provider] : choices;
+  const findingsBefore = existsSync(findingsFile) ? readFileSync(findingsFile, 'utf8') : '';
   const errors = [];
   for (const provider of providers) {
+    if (errors.length) writeFileSync(findingsFile, findingsBefore);
     const choice =
       session?.choice ||
       modelChoice({
@@ -208,8 +126,7 @@ export async function review({
         model: provider === choices[0] ? model : undefined,
         effort: provider === choices[0] ? effort : undefined,
       });
-    const scratch = mkdtempSync(join(tmpdir(), 'deslop-agent-'));
-    let raw,
+    let output,
       sessionId = session?.id;
     let before;
     try {
@@ -221,10 +138,8 @@ export async function review({
       const clean = environment({ env });
       clean.DESLOP_REVIEWER_MODEL = choice.model || '';
       clean.DESLOP_REVIEWER_EFFORT = choice.effort || '';
+      clean.DESLOP_FINDINGS_FILE = findingsFile;
       if (provider === 'codex') {
-        const schema = join(scratch, 'schema.json'),
-          output = join(scratch, 'result.json');
-        writeFileSync(schema, JSON.stringify(REVIEW_SCHEMA));
         const args = ['exec'];
         if (sessionId) args.push('resume');
         const filesystem = Object.entries(
@@ -232,6 +147,7 @@ export async function review({
             cwd,
             common,
             scope,
+            findingsFile,
           }),
         )
           .map(
@@ -243,10 +159,6 @@ export async function review({
           '--ignore-user-config',
           '--ignore-rules',
           '--json',
-          '--output-schema',
-          schema,
-          '--output-last-message',
-          output,
           '-c',
           'approval_policy="never"',
           '-c',
@@ -270,7 +182,7 @@ export async function review({
           );
         if (sessionId) args.push(sessionId);
         args.push('-');
-        const events = await execute({
+        output = await execute({
           cwd,
           command: 'codex',
           args,
@@ -279,7 +191,7 @@ export async function review({
           timeoutMs,
           timeoutCode: 'AGENT_TIMEOUT',
         });
-        for (const line of events.split('\n')) {
+        for (const line of output.split('\n')) {
           try {
             const event = JSON.parse(line);
             if (event.type === 'thread.started') sessionId = event.thread_id;
@@ -287,7 +199,6 @@ export async function review({
             /* Provider diagnostics may accompany JSON events. */
           }
         }
-        raw = readFileSync(output, 'utf8');
         if (!sessionId)
           throw new DeslopError(
             'REVIEW_OUTPUT',
@@ -302,6 +213,7 @@ export async function review({
           cwd,
           common,
           scope,
+          findingsFile,
         });
         deny.push('Read(./.deslop/**)');
         const args = [
@@ -325,30 +237,26 @@ export async function review({
           }),
           '--output-format',
           'json',
-          '--json-schema',
-          JSON.stringify(REVIEW_SCHEMA),
           sessionId ? '--resume' : '--session-id',
           id,
         ];
         if (choice.model) args.push('--model', choice.model);
         if (choice.effort) args.push('--effort', choice.effort);
-        const envelope = JSON.parse(
-          await execute({
-            cwd,
-            command: 'claude',
-            args,
-            input: prompt,
-            env: clean,
-            timeoutMs,
-            timeoutCode: 'AGENT_TIMEOUT',
-          }),
-        );
+        output = await execute({
+          cwd,
+          command: 'claude',
+          args,
+          input: prompt,
+          env: clean,
+          timeoutMs,
+          timeoutCode: 'AGENT_TIMEOUT',
+        });
+        const envelope = JSON.parse(output);
         if (envelope.is_error)
           throw new DeslopError(
             'REVIEW_UNAVAILABLE',
             `Claude could not finish: ${envelope.result || JSON.stringify(envelope)}`,
           );
-        raw = JSON.stringify(envelope.structured_output);
         sessionId = envelope.session_id || id;
       } else {
         const custom = config.reviewers?.[provider];
@@ -367,7 +275,7 @@ export async function review({
           session && !(sessionId && custom.resume)
             ? `Fresh fallback call: prior edits were committed as ${session.commits?.join(', ') || 'none'}. Context: ${JSON.stringify(session.context || {})}\n`
             : '';
-        raw = await execute({
+        output = await execute({
           cwd,
           command: argv[0],
           args: argv.slice(1),
@@ -376,22 +284,15 @@ export async function review({
           timeoutMs,
           timeoutCode: 'AGENT_TIMEOUT',
         });
-      }
-      let value;
-      try {
-        value = JSON.parse(raw);
-      } catch {
-        throw new DeslopError('REVIEW_OUTPUT', 'Agent returned invalid JSON');
-      }
-      const items = parseReview({ value });
-      if (value.sessionId !== undefined) {
-        if (typeof value.sessionId !== 'string' || !value.sessionId.trim())
-          throw new DeslopError('REVIEW_OUTPUT', 'Invalid session id');
-        if (provider !== 'codex' && provider !== 'claude')
-          sessionId = value.sessionId;
+        const reported = reportedSession({ output });
+        if (reported !== undefined) {
+          if (typeof reported !== 'string' || !reported.trim())
+            throw new DeslopError('REVIEW_OUTPUT', 'Invalid session id');
+          sessionId = reported;
+        }
       }
       return {
-        items,
+        output,
         session: {
           provider,
           id: sessionId,
@@ -406,17 +307,21 @@ export async function review({
         throw error;
       if (!before || before !== (await providerState({ cwd }))) throw error;
       errors.push(`${provider}: ${error.message}`);
-    } finally {
-      rmSync(scratch, {
-        recursive: true,
-        force: true,
-      });
     }
   }
   throw new DeslopError('REVIEW_UNAVAILABLE', errors.join('\n'));
 }
 
 const AGENT_TIMEOUT_MS = 15 * 60 * 1000;
+function reportedSession({ output }: { output: string }) {
+  const last = output.trim().split('\n').at(-1) ?? '';
+  if (!last.startsWith('{')) return undefined;
+  try {
+    return JSON.parse(last).sessionId;
+  } catch {
+    return undefined;
+  }
+}
 async function providerState({ cwd }: { cwd: string }) {
   if ((await dirtyPaths({ cwd })).length) return null;
   return await gitState({ cwd });

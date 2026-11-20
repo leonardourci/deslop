@@ -121,21 +121,29 @@ test('machine skill overrides win over repo settings without changing the tree',
   };
   f.configure();
   f.commit();
+  const localSkill = (repo, name, text) => {
+    const folder = join(f.home, '.deslop', 'repos', repo, 'skills', name);
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, 'SKILL.md'), text);
+  };
+  localSkill('repo', 'kill-ai-slop', 'Per-repo cleanup rules');
+  localSkill('repo', 'review-code', 'Per-repo correctness rules');
+  localSkill('other', 'kill-ai-slop', 'Other repo cleanup rules');
   writeFileSync(join(f.home, 'local-review.md'), 'Machine correctness rules');
   const overrides = join(f.home, 'instructions.json');
   writeFileSync(
     overrides,
     JSON.stringify({
       'review-code': 'local-review.md',
-      'kill-ai-slop': false,
       'audit-tests': false,
     }),
   );
   f.env.DESLOP_INSTRUCTIONS = overrides;
   pass(f.call('run', '--reviewer', 'fixture'));
   const prompt = f.load().calls[0].prompt.split('\n\nBranch diff')[0];
-  assert.match(prompt, /Machine correctness rules/);
-  assert.doesNotMatch(prompt, /Repo cleanup rules|audit-tests:|kill-ai-slop:/);
+  assert.match(prompt, /review-code:\nMachine correctness rules/);
+  assert.match(prompt, /kill-ai-slop:\nPer-repo cleanup rules/);
+  assert.doesNotMatch(prompt, /Repo cleanup rules|Other repo cleanup rules|Per-repo correctness rules|audit-tests:/);
   assert.equal(f.git('status', '--porcelain'), '');
 });
 

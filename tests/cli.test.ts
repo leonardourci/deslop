@@ -12,7 +12,7 @@ import {
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { fixture, nonDefectExamples } from './fixtures.ts';
+import { fixture } from './fixtures.ts';
 function passed(result) {
   assert.equal(result.status, 0, result.stdout + result.stderr);
 }
@@ -20,13 +20,7 @@ function failed(result, code) {
   assert.notEqual(result.status, 0, result.stdout);
   assert.match(result.stderr, new RegExp(`code: ${code}`));
 }
-const finding = {
-  id: 'R1',
-  where: 'work.txt:1',
-  problem: 'bad content',
-  fixed: true,
-  kind: 'defect',
-};
+const finding = 'work.txt:1 had bad content; fixed\n';
 
 test('checks cannot change configured hooks or enable an existing hook', (t) => {
   const f = fixture(t);
@@ -49,7 +43,10 @@ test('checks cannot change configured hooks or enable an existing hook', (t) => 
 test('a dangling hook does not block review or proof', (t) => {
   const f = fixture(t);
   symlinkSync(join(f.home, 'missing-hook'), join(f.root, '.git/hooks/pre-commit'));
-  passed(f.call('run', '--reviewer', 'fixture'));
+  const result = f.call('run', '--reviewer', 'fixture');
+  passed(result);
+  assert.match(result.stdout, /findings: none/);
+  assert.equal(f.runs()[0].findings, '');
   passed(f.call('status'));
 });
 
@@ -72,29 +69,15 @@ test('enabled worktree config without a file does not block review or proof', (t
   passed(f.call('status'));
 });
 
-test('status rejects malformed proof counts and null checks without crashing', (t) => {
+test('status rejects malformed checks without crashing', (t) => {
   const f = fixture(t),
     head = f.git('rev-parse', 'HEAD');
-  for (const fields of [
-    { review: {} },
-    {
-      review: {
-        found: -1,
-        fixed: -1,
-      },
-    },
-    { checks: [null] },
-  ]) {
+  for (const checks of [[null], {}, [{ ok: false }]]) {
     const marker = {
       version: 1,
       head,
       verdict: 'passed',
-      checks: [],
-      review: {
-        found: 0,
-        fixed: 0,
-      },
-      ...fields,
+      checks,
     };
     f.git(
       'notes',
@@ -159,7 +142,7 @@ test('removing a file introduced by an earlier fix retains its required checks',
     process.stdin.on('end', () => {
       if (fs.existsSync('extra.txt')) fs.unlinkSync('extra.txt');
       else fs.writeFileSync('extra.txt', 'introduced by review');
-      console.log(JSON.stringify({items: []}));
+      console.log('done');
     });
   `,
     ],
@@ -204,7 +187,7 @@ test('reverting a changed file during review retains its required checks', (t) =
   s.actions = [
     {
       edit: 'good',
-      items: [finding],
+      findings: finding,
     },
   ];
   f.save(s);
@@ -240,19 +223,23 @@ test('commits review edits before checks and marks the final local commit withou
   s.actions = [
     {
       edit: 'good',
-      items: [finding],
+      findings: finding,
     },
   ];
   f.save(s);
   writeFileSync(join(f.root, 'work.txt'), 'bad');
   f.commit();
   const initial = f.git('rev-parse', 'HEAD');
-  passed(f.call('run', '--reviewer', 'fixture'));
+  const result = f.call('run', '--reviewer', 'fixture');
+  passed(result);
   const head = f.git('rev-parse', 'HEAD'),
     data = f.runs()[0];
   assert.notEqual(head, initial);
   assert.deepEqual(data.commits, [head]);
-  assert.equal(data.review.fixed, 1);
+  assert.equal(data.findings, finding);
+  assert.equal(data.verdict, 'passed');
+  assert.ok(!Number.isNaN(Date.parse(data.date)));
+  assert.match(result.stdout, /findings:\nwork.txt:1 had bad content; fixed/);
   assert.equal(data.checks[0].ok, true);
   assert.match(
     f.git('log', '-1', '--format=%s'),
@@ -266,6 +253,11 @@ test('commits review edits before checks and marks the final local commit withou
   passed(f.call('status'));
   const state = f.load();
   assert.equal(state.calls.length, 1);
+  assert.ok(
+    state.calls[0].prompt.includes(
+      JSON.parse(f.git('notes', '--ref=deslop', 'show', head)).run,
+    ),
+  );
   assert.match(state.calls[0].prompt, /No check results are supplied/);
   assert.match(state.calls[0].prompt, /never demand/);
   assert.equal(
@@ -286,7 +278,7 @@ test('failed checks resume the same session and produce bounded failure excerpts
     {},
     {
       edit: 'good',
-      items: [finding],
+      findings: finding,
     },
   ];
   f.save(s);
@@ -392,7 +384,7 @@ test('pushed CI runs push only review fixes and publish an exact-head status wit
   s.actions = [
     {
       edit: 'good',
-      items: [finding],
+      findings: finding,
     },
   ];
   f.save(s);
@@ -437,7 +429,7 @@ test('local override keeps fix commits local even when the starting commit was p
   s.actions = [
     {
       edit: 'good',
-      items: [finding],
+      findings: finding,
     },
   ];
   f.save(s);
@@ -474,7 +466,7 @@ test('providers deny git tools, retain sessions, detect hosted Codex and apply m
     {},
     {
       edit: 'good',
-      items: [finding],
+      findings: finding,
     },
   ];
   f.save(s);
@@ -516,101 +508,25 @@ test('custom commands without resume get a fresh call explaining earlier commits
   const s = f.load();
   s.actions = [
     {},
-    {
-      edit: 'good',
-      items: [finding, {
-        ...nonDefectExamples[0],
-        kind: 'verification'
-      }],
-    },
+    { edit: 'good' },
   ];
   f.save(s);
   passed(f.call('run', '--reviewer', 'fixture'));
-  assert.deepEqual(f.runs()[0].checkFixes[0].items, [finding]);
   assert.match(f.load().calls[1].prompt, /Fresh fallback call/);
   assert.deepEqual(f.load().calls[1].args, []);
 });
 
-test('invalid agent output and unfixed items cannot create proof', (t) => {
-  const f = fixture(t);
-  let s = f.load();
-  s.actions = [{ invalid: true }];
-  f.save(s);
-  failed(f.call('run', '--reviewer', 'fixture'), 'REVIEW_OUTPUT');
-  assert.equal(f.call('status').status, 1);
-  s = f.load();
-  s.actions = [{ items: [{
-    ...finding,
-    id: ' '
-  }] }];
-  f.save(s);
-  const blank = f.call('run', '--reviewer', 'codex');
-  failed(blank, 'REVIEW_OUTPUT');
-  assert.match(blank.stderr, /Invalid review item 1: .*"id":" "/);
-  s = f.load();
-  s.actions = [
-    {
-      items: [
-        {
-          ...finding,
-          fixed: false,
-        },
-      ],
-    },
-  ];
-  f.save(s);
-  failed(f.call('run', '--reviewer', 'fixture'), 'UNFIXED');
-  assert.equal(f.call('status').status, 1);
-});
-
-test('reviewer non-defect notes do not block checks or proof', (t) => {
+test('findings in any form never gate checks or proof', (t) => {
   const f = fixture(t);
   const s = f.load();
-  s.actions = [{ items: [
-    ...nonDefectExamples.map((item, index) => ({
-      ...item,
-      kind: index === 0 ? 'verification' : 'note'
-    })),
-    finding,
-  ] }];
+  const text = `Unfixed: ${'not JSON, still a finding\n'.repeat(30)}`;
+  s.actions = [{ findings: text }];
   f.save(s);
-  passed(f.call('run', '--reviewer', 'fixture'));
-  const data = f.runs()[0];
-  assert.deepEqual(data.review, {
-    found: 1,
-    fixed: 1,
-    items: [finding]
-  });
-  assert.equal(data.checks[0].ok, true);
+  const long = f.call('run', '--reviewer', 'fixture');
+  passed(long);
+  assert.equal(f.runs()[0].findings, text);
+  assert.match(long.stdout, /findings: 30 lines; read findings in .*\.deslop\/repos\/repo\/reviews\/\d{4}-\d\d-\d\d-change\.json/);
   passed(f.call('status'));
-});
-
-test('real unfixed defects still block proof regardless of wording', (t) => {
-  const f = fixture(t);
-  const s = f.load();
-  const defects = [
-    'No defect found is printed even when a real finding is unfixed',
-    'Verification fails because the command exits successfully on invalid input',
-    'The reviewer ran no checks warning hides a failed required check',
-  ].map((problem, index) => ({
-    id: `R${index}`,
-    where: 'src/run.js:1',
-    problem,
-    fixed: false,
-    kind: 'defect',
-  }));
-  s.actions = [{ items: [...defects, ...nonDefectExamples.map(item => ({
-    ...item,
-    kind: 'note'
-  }))] }];
-  f.save(s);
-  failed(f.call('run', '--reviewer', 'fixture'), 'UNFIXED');
-  assert.deepEqual(f.runs()[0].review, {
-    found: defects.length,
-    fixed: 0,
-    items: defects
-  });
-  assert.equal(f.call('status').status, 1);
 });
 
 test('base override wins over an open stacked PR base and no PR falls back locally', (t) => {
@@ -675,8 +591,9 @@ test('the prompt opens with the intent file, else the open PR description, else 
       },
     ],
   );
-  const day = /^\d{4}-\d{2}-\d{2}-remote-/;
-  const names = readdirSync(join(f.home, 'deslop', 'reviews')).sort();
+  const day = /^\d{4}-\d{2}-\d{2}-/;
+  const reviews = join(f.home, '.deslop', 'repos', 'remote', 'reviews');
+  const names = readdirSync(reviews).sort();
   assert.ok(names.every((name) => day.test(name)), names.join(', '));
   assert.deepEqual(
     names.map((name) => name.replace(day, '')),
@@ -684,7 +601,7 @@ test('the prompt opens with the intent file, else the open PR description, else 
   );
   assert.equal(
     JSON.parse(f.git('notes', '--ref=deslop', 'show', 'HEAD')).run,
-    join(f.home, 'deslop', 'reviews', names[2]),
+    join(reviews, names[2]),
   );
 });
 
@@ -706,7 +623,7 @@ test('clean reviews whole files by path with the same checks, commits and proof 
   s.actions = [
     {
       files: { 'lib/old.txt': 'tidy' },
-      items: [finding],
+      findings: finding,
     },
   ];
   f.save(s);
@@ -817,7 +734,7 @@ test('failed CI resumes the agent, pushes only its fix and waits on the new exac
     {},
     {
       edit: 'good',
-      items: [finding],
+      findings: finding,
       checks: [
         {
           id: 2,
@@ -860,9 +777,9 @@ test('unavailable providers fall back with their own models rather than the prim
   };
   f.configure();
   f.commit();
-  mkdirSync(join(f.home, 'config/deslop'), { recursive: true });
+  mkdirSync(join(f.home, '.deslop'), { recursive: true });
   writeFileSync(
-    join(f.home, 'config/deslop/settings.json'),
+    join(f.home, '.deslop/settings.json'),
     JSON.stringify({ reviewer: ['missing', 'fixture'] }),
   );
   passed(
@@ -885,8 +802,8 @@ test('a concurrent HEAD change between final checks and proof cannot receive a m
     join(f.bin, 'git'),
     `#!/usr/bin/env node
 const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
-const args=process.argv.slice(2), real=${JSON.stringify(f.gitBin)}, root=${JSON.stringify(f.root)}, counter=${JSON.stringify(join(f.home, 'statuses-after-checks'))}, reviews=${JSON.stringify(join(f.home, 'deslop', 'reviews'))};
-if(args[0]==='status') { if(fs.existsSync(reviews)) { const names=fs.readdirSync(reviews); const record=names[0]&&path.join(reviews,names[0]); if(record&&JSON.parse(fs.readFileSync(record)).checks.some(check=>check.ok)) { if(!fs.existsSync(counter)){fs.writeFileSync(counter,'changed');cp.execFileSync(real,['commit','--allow-empty','-m','concurrent commit'],{cwd:root});} } } }
+const args=process.argv.slice(2), real=${JSON.stringify(f.gitBin)}, root=${JSON.stringify(f.root)}, counter=${JSON.stringify(join(f.home, 'statuses-after-checks'))}, reviews=${JSON.stringify(join(f.home, '.deslop', 'repos', 'repo', 'reviews'))};
+if(args[0]==='status') { if(fs.existsSync(reviews)) { const names=fs.readdirSync(reviews); const record=names[0]&&path.join(reviews,names[0]); const text=record?fs.readFileSync(record,'utf8'):''; if(text.startsWith('{')&&JSON.parse(text).checks.some(check=>check.ok)) { if(!fs.existsSync(counter)){fs.writeFileSync(counter,'changed');cp.execFileSync(real,['commit','--allow-empty','-m','concurrent commit'],{cwd:root});} } } }
 const result=cp.spawnSync(real,args,{stdio:'inherit'});process.exit(result.status??1);
 `,
     { mode: 0o755 },
@@ -968,7 +885,7 @@ test('new normal test files are created, checked, committed and listed in the ru
         content:
           "require('node:test').test('coverage',()=>require('node:assert/strict').equal(2,2));",
       },
-      items: [finding],
+      findings: finding,
     },
   ];
   f.save(s);

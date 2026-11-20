@@ -39,14 +39,8 @@ export type Places = {
   root: string;
   common: string;
   home: string;
+  repoHome: string;
   lock: string;
-};
-export type ReviewItem = {
-  id: string;
-  where: string;
-  problem: string;
-  fixed: boolean;
-  kind: 'defect' | 'note' | 'verification';
 };
 export type Session = {
   provider: string;
@@ -54,7 +48,7 @@ export type Session = {
   choice?: ModelChoice;
   commits?: string[];
   context?: {
-    review: ReviewItem[];
+    findings: string;
     paths: string[];
   };
 };
@@ -88,6 +82,7 @@ export type Check = {
 };
 export type RunData = {
   id: string;
+  date: string;
   repo: string;
   branch: string;
   pr?: number;
@@ -102,17 +97,9 @@ export type RunData = {
   initialHead: string;
   head: string;
   checks: Check[];
-  review: {
-    found: number;
-    fixed: number;
-    items: ReviewItem[];
-  };
   commits: string[];
-  checkFixes: {
-    turn: number;
-    items: ReviewItem[];
-  }[];
   newFiles: string[];
+  findings: string;
   workflowEdits?: string[];
   unstableCommands?: string[];
   remoteWarning?: string;

@@ -36,7 +36,6 @@ export function fixture(t) {
   const env: NodeJS.ProcessEnv = {
     HOME: home,
     USERPROFILE: home,
-    XDG_CONFIG_HOME: join(home, 'config'),
     GIT_CONFIG_GLOBAL: '/dev/null',
     GIT_CONFIG_NOSYSTEM: '1',
     PATH: bin,
@@ -94,6 +93,7 @@ process.stdin.on('end', () => {
     effort: process.env.DESLOP_REVIEWER_EFFORT,
     parent: process.env.CODEX_THREAD_ID,
     pnyx: process.env.PNYX_TASK,
+    findings: fs.readFileSync(process.env.DESLOP_FINDINGS_FILE, 'utf8'),
   });
   const action = state.actions.shift() || {};
   if (action.edit) fs.writeFileSync('work.txt', action.edit);
@@ -107,17 +107,12 @@ process.stdin.on('end', () => {
   if (action.config) cp.execFileSync('git', ['config', ...action.config]);
   if (action.checks) state.checks = action.checks;
   if (action.git) cp.execFileSync('git', ['commit', '--allow-empty', '-m', 'agent must not commit']);
+  if (action.findings) fs.appendFileSync(process.env.DESLOP_FINDINGS_FILE, action.findings);
   fs.writeFileSync(path, JSON.stringify(state));
-  const value = action.invalid ? { wrong: true } : { items: action.items || [], sessionId: 'session-fixture' };
   const args = process.argv.slice(2);
-  if (args.includes('--output-last-message')) {
-    fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], JSON.stringify(value));
-    console.log(JSON.stringify({ type: 'thread.started', thread_id: 'session-fixture' }));
-  } else if (args.includes('--output-format')) {
-    console.log(JSON.stringify({ structured_output: value, session_id: 'session-fixture' }));
-  } else {
-    console.log(JSON.stringify(value));
-  }
+  if (args.includes('--json')) console.log(JSON.stringify({ type: 'thread.started', thread_id: 'session-fixture' }));
+  else if (args.includes('--output-format')) console.log(JSON.stringify({ result: '', session_id: 'session-fixture' }));
+  else console.log(JSON.stringify({ sessionId: 'session-fixture' }));
 });`;
   writeFileSync(agent, agentSource, { mode: 0o755 });
   writeFileSync(join(bin, 'codex'), agentSource, { mode: 0o755 });
@@ -208,10 +203,14 @@ if (args[0] === 'pr') {
       env,
       encoding: 'utf8',
     });
-  const reviews = join(home, 'deslop', 'reviews');
+  const repos = join(home, '.deslop', 'repos');
   const runs = () =>
-    readdirSync(reviews)
-      .map((name) => join(reviews, name))
+    readdirSync(repos)
+      .flatMap((repo) =>
+        readdirSync(join(repos, repo, 'reviews')).map((name) =>
+          join(repos, repo, 'reviews', name),
+        ),
+      )
       .sort((a, b) => statSync(a).mtimeMs - statSync(b).mtimeMs)
       .map((file) => JSON.parse(readFileSync(file, 'utf8')));
   const push = () => {
@@ -243,24 +242,3 @@ if (args[0] === 'pr') {
     cli,
   };
 }
-
-export const nonDefectExamples = [
-  {
-    "id": "checks",
-    "where": "",
-    "problem": "No checks were run, as requested.",
-    "fixed": false
-  },
-  {
-    "id": "7",
-    "where": "Review scope",
-    "problem": "The review used the supplied diff and file excerpts. No checks ran, so the full suite and call sites outside the supplied diff remain unverified.",
-    "fixed": false
-  },
-  {
-    "id": "audit-scope",
-    "where": "tests/e2e/card-input.test.ts - /Users/leonardourci/.pnyx/hydras/hydra-2/copies/pnyx-118/tests/e2e/card-input.test.ts",
-    "problem": "No defect found in the supplied change. Keep the test. It asserts that the new brief becomes visible in the open modal’s Instructions region and the old brief is no longer visible there. The review used the supplied diff and test source because local file reads were unavailable. Checks remain pending with Deslop.",
-    "fixed": false
-  }
-];
