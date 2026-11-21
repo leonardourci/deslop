@@ -272,6 +272,7 @@ test('commits review edits before checks and marks the final local commit withou
 test('failed checks resume with bounded ESLint diagnostics and the full log path', (t) => {
   const f = fixture(t);
   const output = [
+    'Loading error reporting rules',
     ...Array(25).fill('setup output'),
     '$ eslint --fix .',
     '',
@@ -307,14 +308,17 @@ test('failed checks resume with bounded ESLint diagnostics and the full log path
   assert.equal(calls.length, 2);
   assert.deepEqual(calls[1].args, ['--resume', 'session-fixture']);
   assert.match(calls[1].prompt, /src\/app\/event-log\.ts/);
-  assert.match(calls[1].prompt, /119:1/);
+  assert.match(calls[1].prompt, /119:1  error .*@stylistic\/max-len/);
   assert.ok(calls[1].prompt.includes(data.checks[0].log));
   assert.match(calls[1].prompt, /^Intent supplied with this review[^\n]*\nAsked: make work\.txt good\./);
   assert.equal(data.checks[0].ok, false);
   assert.equal(data.checks[1].ok, true);
   assert.ok(data.checks[0].failures[0].excerpt.split('\n').length <= 20);
   assert.match(data.checks[0].failures[0].excerpt, /src\/app\/event-log\.ts/);
-  assert.match(data.checks[0].failures[0].excerpt, /119:1/);
+  assert.match(
+    data.checks[0].failures[0].excerpt,
+    /119:1  error .*@stylistic\/max-len/,
+  );
   assert.ok(
     readFileSync(data.checks[0].log, 'utf8').split('\n').length >
       20,

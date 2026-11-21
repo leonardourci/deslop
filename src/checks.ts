@@ -15,7 +15,7 @@ export function failureDetails({
 }) {
   const lines = output.split('\n');
   const index = lines.findIndex((line) =>
-    /(?:FAIL|Error:|\berror\b|AssertionError|[×✖])/i.test(line),
+    /(?:FAIL|Error:|AssertionError|[×✖])|\b\d+:\d+\s+error\s/i.test(line),
   );
   const start = Math.max(0, index - 2);
   const tests = [
