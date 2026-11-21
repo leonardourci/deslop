@@ -15,9 +15,9 @@ export function failureDetails({
 }) {
   const lines = output.split('\n');
   const index = lines.findIndex((line) =>
-    /(?:FAIL|Error:|AssertionError|[×✖])/i.test(line),
+    /(?:FAIL|Error:|\berror\b|AssertionError|[×✖])/i.test(line),
   );
-  const start = Math.max(0, index);
+  const start = Math.max(0, index - 2);
   const tests = [
     ...new Set(
       lines.flatMap((line) => {

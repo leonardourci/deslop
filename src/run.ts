@@ -724,6 +724,7 @@ async function performRun({
             .filter((check) => !check.ok)
             .map((check) => ({
               name: check.name,
+              log: check.log,
               failures: check.failures,
             })),
         )}`,
