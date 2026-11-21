@@ -269,8 +269,27 @@ test('commits review edits before checks and marks the final local commit withou
   assert.equal(f.call('status').status, 1);
 });
 
-test('failed checks resume the same session and produce bounded failure excerpts and full logs', (t) => {
+test('failed checks resume with bounded ESLint diagnostics and the full log path', (t) => {
   const f = fixture(t);
+  const output = [
+    'Loading error reporting rules',
+    ...Array(25).fill('setup output'),
+    '$ eslint --fix .',
+    '',
+    '/project/src/app/event-log.ts',
+    '  119:1  error  This line has a length of 102. Maximum allowed is 100  @stylistic/max-len',
+    '',
+    '✖ 1 problem (1 error, 0 warnings)',
+    '',
+    '[ELIFECYCLE] Command failed with exit code 1.',
+    '',
+    '/bin/sh failed (1): $ eslint --fix .',
+    ...Array(25).fill('trailing output'),
+  ].join('\n');
+  writeFileSync(
+    join(f.root, 'check.cjs'),
+    `if(require('node:fs').readFileSync('work.txt','utf8')!=='good'){console.error(${JSON.stringify(output)});process.exit(1)}`,
+  );
   writeFileSync(join(f.root, 'work.txt'), 'bad');
   f.commit();
   const s = f.load();
@@ -288,11 +307,18 @@ test('failed checks resume the same session and produce bounded failure excerpts
     data = f.runs()[0];
   assert.equal(calls.length, 2);
   assert.deepEqual(calls[1].args, ['--resume', 'session-fixture']);
-  assert.match(calls[1].prompt, /FAIL work/);
+  assert.match(calls[1].prompt, /src\/app\/event-log\.ts/);
+  assert.match(calls[1].prompt, /119:1\s+error\s+.*@stylistic\/max-len/);
+  assert.ok(calls[1].prompt.includes(data.checks[0].log));
   assert.match(calls[1].prompt, /^Intent supplied with this review[^\n]*\nAsked: make work\.txt good\./);
   assert.equal(data.checks[0].ok, false);
   assert.equal(data.checks[1].ok, true);
   assert.ok(data.checks[0].failures[0].excerpt.split('\n').length <= 20);
+  assert.match(data.checks[0].failures[0].excerpt, /src\/app\/event-log\.ts/);
+  assert.match(
+    data.checks[0].failures[0].excerpt,
+    /119:1\s+error\s+.*@stylistic\/max-len/,
+  );
   assert.ok(
     readFileSync(data.checks[0].log, 'utf8').split('\n').length >
       20,
