@@ -308,7 +308,7 @@ test('failed checks resume with bounded ESLint diagnostics and the full log path
   assert.equal(calls.length, 2);
   assert.deepEqual(calls[1].args, ['--resume', 'session-fixture']);
   assert.match(calls[1].prompt, /src\/app\/event-log\.ts/);
-  assert.match(calls[1].prompt, /119:1  error .*@stylistic\/max-len/);
+  assert.match(calls[1].prompt, /119:1\s+error\s+.*@stylistic\/max-len/);
   assert.ok(calls[1].prompt.includes(data.checks[0].log));
   assert.match(calls[1].prompt, /^Intent supplied with this review[^\n]*\nAsked: make work\.txt good\./);
   assert.equal(data.checks[0].ok, false);
@@ -317,7 +317,7 @@ test('failed checks resume with bounded ESLint diagnostics and the full log path
   assert.match(data.checks[0].failures[0].excerpt, /src\/app\/event-log\.ts/);
   assert.match(
     data.checks[0].failures[0].excerpt,
-    /119:1  error .*@stylistic\/max-len/,
+    /119:1\s+error\s+.*@stylistic\/max-len/,
   );
   assert.ok(
     readFileSync(data.checks[0].log, 'utf8').split('\n').length >
